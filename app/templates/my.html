@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ _("My subscriptions") }}{% endblock %}
+{% block content %}
+<h1>{{ _("My subscriptions") }}</h1>
+<section class="panel">
+  <h2>{{ _("Your personal calendar feed") }}</h2>
+  <p>{{ _("Add this address to Outlook, Google or Apple Calendar as an internet calendar. Deadlines of everything you subscribe to appear there and update automatically.") }}</p>
+  <div class="copyrow"><input id="myfeed" readonly value="{{ feed }}"><button type="button" class="btn" data-copy="myfeed">{{ _("Copy") }}</button></div>
+  <div class="acts">
+    <a class="btn primary" href="{{ webcal }}">{{ _("Open in Outlook / Apple Calendar") }}</a>
+    <a class="btn" href="{{ feed }}">📅 {{ _("Download calendar (.ics)") }}</a>
+    <form method="post" action="{{ url_for('main.reset_feed') }}" onsubmit="return confirm('?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn ghost">{{ _("Reset feed address") }}</button></form>
+  </div>
+</section>
+<div class="cards">
+  {% for c in calls %}{{ m.card(c, request.path) }}{% else %}<p class="empty">{{ _("You have no subscriptions yet.") }} <a href="{{ url_for('main.index') }}">{{ _("Open calls") }} →</a></p>{% endfor %}
+</div>
+{% endblock %}

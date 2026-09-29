@@ -1,0 +1,15 @@
+# /etc/systemd/system/opencalls.service
+[Unit]
+Description=MISC open calls (gunicorn)
+After=network.target postgresql.service
+
+[Service]
+User=opencalls
+Group=www-data
+WorkingDirectory=/srv/opencalls
+EnvironmentFile=/srv/opencalls/.env
+ExecStart=/srv/opencalls/.venv/bin/gunicorn -w 3 -b 127.0.0.1:8010 --timeout 120 --access-logfile - wsgi:app
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Suggest a call") }}{% endblock %}
+{% block content %}
+<h1>{{ _("Suggest a call") }}</h1>
+<section class="panel narrow">
+  <p>{{ _("Paste a link to a call, CFP, residency or competition. It will be read automatically and reviewed by the MISC coordinator before it is published.") }}</p>
+  <form method="post" class="stack" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='…'">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>{{ _("Link") }}<input type="url" name="url" required placeholder="https://"></label>
+    <label>{{ _("Comment (optional)") }}<textarea name="comment" rows="3"></textarea></label>
+    <button class="btn primary">{{ _("Send") }}</button>
+  </form>
+</section>
+{% endblock %}

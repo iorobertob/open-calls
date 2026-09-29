@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "opencalls",
+      "runtimeExecutable": "/Users/selves/Documents/ROBERTO/WORKS/DEVELOPMENT/LMTA/OPEN_CALLS/.venv/bin/flask",
+      "runtimeArgs": ["--app", "wsgi.py", "run", "--port", "5055", "--debug"],
+      "env": {"DEV_LOGIN": "1", "ADMIN_EMAILS": "admin@lmta.lt"},
+      "port": 5055
+    }
+  ]
+}

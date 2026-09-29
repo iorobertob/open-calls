@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Users</h1>
+<table class="adm">{% for u in users %}<tr><td>{{ u.name }} &lt;{{ u.email }}&gt;<br><small>{{ u.subscriptions|length }} subscriptions · last login {{ u.last_login_at or '—' }}</small></td>
+<td><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="user_id" value="{{ u.id }}">
+<button class="btn {{ 'on' if u.is_admin }}" {{ 'disabled' if u.id == user.id }}>{{ 'Admin ✓' if u.is_admin else 'Make admin' }}</button></form></td></tr>{% endfor %}</table>
+{% endblock %}

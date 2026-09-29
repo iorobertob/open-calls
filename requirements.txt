@@ -1,0 +1,15 @@
+Flask>=3.1
+Flask-SQLAlchemy>=3.1
+Flask-Migrate>=4.1
+Flask-Login>=0.6.3
+Flask-WTF>=1.2
+msal>=1.31
+anthropic>=1.9
+pydantic>=2.9
+requests>=2.32
+beautifulsoup4>=4.12
+icalendar>=6.0
+APScheduler>=3.10,<4
+python-dotenv>=1.0
+gunicorn>=23.0
+psycopg[binary]>=3.2

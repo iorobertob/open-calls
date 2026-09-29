@@ -1,0 +1,167 @@
+Tu ruoši savaitinį atvirų kvietimų komplektą Edvinui, LMTA (Lietuvos muzikos ir teatro akademija) Muzikos inovacijų studijų centro (MISC, https://misc.lmta.lt) koordinatoriui. Atsakyk LIETUVIŠKAI.
+
+Ši užduotis veikia debesyje ir NETURI prieigos prie Edvino kompiuterio. Visi failai atsiunčiami į pokalbį — aplanką jis susideda pats. Failų vardai — su šios dienos data (MMMM-MM-DD).
+
+PABAIGOS SĄLYGA — patikrink PIRMIAUSIA. Ciklas veikia iki 2027-07-01. Jei šiandien 2027-06-28 arba vėliau: padaryk darbą kaip įprastai, pabaigoje per mcp__claude-code-remote__list_triggers susirask šią užduotį („MISC / LMTA — savaitinis komplektas"), ištrink per delete_trigger ir parašyk, kad tai paskutinis komplektas.
+
+KETURI DELIVERABLE'AI, visi privalomi:
+A) MISC-sarasas-<data>.html — sąrašas naršyklei
+B) MISC-ekranas-<data>.html — ekrano failas televizoriui
+C) MISC-ekranas-<data>-visi-lapai.pdf
+D) MISC-ekranas-<data>-lapai-JPEG-4K.zip — JPEG, 3840×2160
+
+Įkėlimo į pokalbį riba — 30 MB vienam failui. Jei PDF didesnis — mažink PDF JPEG kokybę (ieškok mažėjančia tvarka, pvz. 74 → 66 → 58 → 52), kol failas tilps po 29 MB, ir PATIKRINK QR iš naujo. Jei ZIP didesnis — dalyk į kelias dalis (…-JPEG-4K-1dalis.zip, -2dalis.zip), JPEG kokybė lieka 94.
+
+
+=== BENDROSIOS TAISYKLĖS (galioja visur, toliau nekartojamos) ===
+
+1. PATIKRA. Kiekvieną NAUJĄ įrašą tikrink atidarydamas oficialų ORGANIZATORIAUS puslapį, ne agregatorių. Agregatoriai (musicalchairs, scorefol.io, on-the-move, ULYSSES) pasensta: 2026-09-07 musicalchairs rodė Berliner Kompositionspreis terminą rugsėjo 15, o organizatoriaus puslapyje kvietimas buvo uždarytas nuo vasario 18. Nedėk nieko, ko nepatikrinai. Jei WebFetch neveikia — verified:false ir note pradėk „nepatikrinta — atidaryti rankiniu būdu".
+
+2. PAVYZDŽIAI, NE RIBA. Visi šiame tekste išvardyti renginiai, konferencijų šeimos ir šaltiniai yra atspirties taškas, o ne baigtinis sąrašas. Jei įvardytas šaltinis šią savaitę nieko neduoda, tai NEREIŠKIA, kad kvietimų nėra — ieškok kitose to paties lauko šeimose, draugijų puslapiuose, universitetų CFP registruose. Ši klaida jau padaryta 2026-09-07: peržiūrėtas tik įvardytas konferencijų sąrašas, sustota ties dviem įrašais, o realiai tą savaitę atvirų kvietimų buvo šešiolika. Jei abejoji, ar įrašas tinka — DĖK ir aiškiai parašyk apribojimą, o ne praleisk tylomis. Kiekio limito NĖRA.
+
+3. PASIBAIGĘ ĮRAŠAI dingsta iš VISKO: iš sąrašo (visų sekcijų, įskaitant „atmestus"), iš ekrano ir iš duomenų bloko. Atsakyme juos tik trumpai išvardyk („baigėsi: …"), kad Edvinas ištrintų iš savo medžiagos.
+
+4. ŠALTINIO LAUKAI. Kiekvienam naujam įrašui užfiksuok: `source` — trumpas šaltinio pavadinimas (pvz. „ULYSSES upcoming-and-open-opportunities (page 2)", „musicalchairs competitions", „mdw conferences-cfp list", „WebSearch: '<užklausa>'", „organizatoriaus puslapis — sezoninė patikra"); `sourceUrl` — to šaltinio adresas (WebSearch atveju tuščias); `firstSeen` — šiandienos data; `lastVerified` — šiandienos data, jei patikrinta organizatoriaus puslapyje; `expires` — terminas, o jei termino nėra — renginio data (tuščia tik nuolatiniams). Subagentams liepk šiuos laukus pildyti iš karto. `expires` (o jei jo nėra — `deadline`) yra data, pagal kurią kitą savaitę sprendžiama, ar įrašas dar galioja.
+
+5. KONFERENCIJOMS privalomi trys papildomi laukai: nuotolinis dalyvavimas, registracijos mokestis, studentų nuolaida. Jei nepaskelbta — taip ir parašyk. Atskirai vertingi renginiai, kur teikti jau vėlu, bet nuotolinė registracija pigi (pvz. 40–100 $) — tai realus būdas studentui pamatyti lauką.
+
+6. SIUNTIMAS. Kiekvieną failą siųsk per SendUserFile iškart, kai jis paruoštas — nelauk kitų. A ir B — display "render", C — "render", D — "attach". Dirbk etapais: jei laikas baigiasi, geriau turėti sąrašą ir ekrano failą, nei nieko; ko nespėjai — parašyk.
+
+
+=== 1. PRADŽIA: ŠABLONAS, PRAĖJUSI SAVAITĖ IR ŠALTINIŲ ATMINTIS ===
+
+Ekrano failo šablonas laikomas Edvino Claude paskyroje kaip artefaktas — tai pirminis šaltinis. Jame yra tikras MISC logotipas (įrašytas kaip data URI, atskiro PNG NEREIKIA), QR generatorius, temų sistema ir duomenų patikra.
+
+ŠABLONO URL: https://claude.ai/code/artifact/4ee7951d-de2b-4e7c-88bb-314fb1d52ffc
+
+Imk jį šia tvarka:
+  1) Artifact įrankis, action "read", url — tas pats URL. Grąžina neapdorotą HTML (pilnas failas išsaugomas diske — naudok jį, ne savo kopiją).
+  2) Jei nepavyksta — WebFetch tuo pačiu URL.
+  3) Jei nė vienas neveikia — NEKURK ekrano failo iš naujo nuo nulio ir nepiešk logotipo pats. Padaryk sąrašą (A), paruošk pilną `CALLS` masyvą kaip atskirą .json failą, atsiųsk jį ir parašyk: „ekrano failo neatnaujinau, nes nepasiekiau šablono — atidarykite šį pokalbį kompiuteryje ir parašykite man, užbaigsiu per minutę".
+
+Artefaktas grąžinamas su paslaugos apvalkalu (<!doctype html><html><head>…</head><body>). Paimk turinį po pirmojo <body> ir apgaubk taip:
+<!DOCTYPE html><html lang="lt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body> … </body></html>
+
+PRAĖJUSIOS SAVAITĖS SĄRAŠAS — artefaktas „MISC atviri kvietimai":
+https://claude.ai/code/artifact/80b4777b-9949-4ea2-997b-2390f4804d3e
+Perskaityk jį (Artifact, action "read"). Jame yra MAŠININIS DUOMENŲ BLOKAS:
+<script type="application/json" id="misc-duomenys">{"schema":1,"generated":"…","calls":[…]}</script>
+Kiekvienas `calls` įrašas turi status (open | watch | reject) ir visus sąrašo bei ekrano laukus: kind, star, titleLt, titleEn, org, cityLt/En, countryLt/En, countryCode, deadline, deadlineWordLt/En, url, descLt/En, topics, kamTinka, nauda, mokestis, amzius, padengiama, nuotoliu, registracija, studentuNuolaida, note, verified, source, sourceUrl, firstSeen, lastVerified, expires. Tai pagrindinė savaitės bazė — JSON.parse jį (tekste „<\/" reiškia „</"). Stilių ir formuluotes imk iš to paties puslapio. Jei bloko nėra — išparsink HTML kortelių turinį. Jei praėjusios savaitės sąrašo niekur nėra — sudaryk komplektą nuo nulio ir apie tai aiškiai parašyk atsakyme.
+
+ŠALTINIŲ ATMINTIS: perskaityk atminties failą /areas/misc-kvietimu-saltiniai.md (mcp__memory__memory_read). Jame — šaltiniai, per kuriuos anksčiau rasti kvietimai, ir kiek jie davė. Pirmiausia apeik produktyviausius. Jei atminties įrankiai nepasiekiami — naudok `source`/`sourceUrl` laukus iš duomenų bloko.
+
+
+=== 2. SENI ĮRAŠAI — PERKELK PAGAL DATĄ, INTERNETE NETIKRINK ===
+
+Edvino taisyklė (nuo 2026-09-21):
+  • status "open" ir "reject" įrašai, kurių terminas (`expires`, o jei jo nėra — `deadline`) yra ŠIANDIEN ARBA VĖLIAU, arba kurie nuolatiniai (be datos) — PERKELIAMI tokie, kokie yra. Pakartotinai internete jų NETIKRINK (WebFetch nereikia). Išsaugok visus laukus, source, sourceUrl, firstSeen ir lastVerified nekeistus; atnaujink tik „liko N d." skaičiavimą. „nepatikrinta" žyma lieka.
+  • Pasibaigusius išmesk — žr. bendrąją taisyklę 3.
+  • status "watch" („Stebėti") įrašus TIKRINK — tai vieta, iš kurios atsiranda nauji kvietimai. Atsidariusį perkelk į "open" (su pilna informacija ir patikra), atkritusį išmesk. Registracijos įrašus („dalyvauti, ne teikti") laikyk vertingais: jei nuotolinė registracija dar atvira ir pigi — "open" su aiškia pastaba, kad teikti vėlu; jei uždaryta — išmesk.
+  • Jei ieškodamas naujų atsitiktinai pamatai, kad perkeltas įrašas pratęstas ar atšauktas — pataisyk; bet specialiai jų netikrink.
+
+
+=== 3. SURASK NAUJŲ ===
+
+Dublių su perkeltais įrašais nekurk (lygink pagal url IR pavadinimą; atkreipk dėmesį, kad keli skirtingi kvietimai gali dalintis tuo pačiu url, pvz. impuls special programs).
+
+GEOGRAFIJA — trys taisyklės:
+  • KONFERENCIJOS, simpoziumai, call for papers IR žurnalų teminių numerių kvietimai — VISAS PASAULIS: JAV, Kanada, Japonija, Korėja, Kinija, Australija, Lotynų Amerika, bet kur. Trukmė ir formatas NESVARBU: tinka ir vienos dienos seminaras, ir doktorantų kolokviumas, ir vien internetu vykstanti konferencija, ir žurnalo kvietimas teikti straipsnius. Vienintelis kriterijus — ar tinka doktorantui ar podoktorantūros lygio muzikos tyrėjui MISC profilyje.
+  • AKADEMIJOS, dirbtuvės, vasaros kursai IR REZIDENCIJOS — taip pat VISAS PASAULIS. Sąlyga: Lietuvos arba ES gyventojas turi realiai galėti dalyvauti. Prie kiekvieno tokio įrašo parašyk vizos, kelionės ir finansavimo realybę.
+  • KONKURSAI, FESTIVALIAI IR MOBILUMAS — ES + Erasmus+ programos šalys + Šveicarija, Norvegija, Islandija, JK. Šių už Europos ribų neplėsk.
+
+APIMTIS: media art, digital music and sound art, AI art, interactive art; electroacoustic music, sound art, sonic arts; music technology, sound research, installations; art-science-technology, experimental media, hybrid theory/practice; immersive audio, spatial audio, VR/AR audio, 3D sound; computer music, algorithmic composition, electronic music, music tech; tradicinė ir instrumentinė kompozicija.
+
+KONFERENCIJŲ ŠEIMOS, kurias privalu peržiūrėti kas savaitę:
+  – Signalų apdorojimas ir MIR: ICASSP, EUSIPCO, Interspeech, WASPAA, DCASE, ISMIR, DAFx, AES konvencijos ir teminės konferencijos, Forum Acusticum / Acoustics, Inter-noise
+  – Kompiuterinė muzika ir kūrybinės technologijos: ICMC, NIME, SMC, AIMC, ICLC, TENOR, xCoAx, Web Audio Conference, Audio Mostly, MOCO, ICAD, CMMR, ISEA, EMS Network
+  – Muzikologija, meninis tyrimas, muzikos psichologija: RMA ir BFE (ypač BFE–RMA doktorantų konferencija), ICMPC–ESCOM, SysMus, DMRN, SEMPRE, SAR, EPARM, CARPA, IMS, SMT, AMS, RiME, Performance Studies Network, IASPM regioninės šakos (Norden, D-A-CH, UK & Ireland, Benelux), GfM, SFM
+  – Žurnalų kvietimai teikti straipsnius: Organised Sound, Computer Music Journal, Journal of Sonic Studies, Journal for Artistic Research, FORUM+, Leonardo Music Journal, TISMIR, Music & Science
+  – Registrai: https://www.mdw.ac.at/forschungsfoerderung/conferences-cfp/ · http://www.wikicfp.com · draugijų puslapiai (ismir.net, nime.org, smcnetwork.org, computermusic.org, icad.org, dafx.de, aimusiccreativity.org, rma.ac.uk)
+  – Didelių konferencijų SATELITINIAI TAKELIAI tikrinami atskirai nuo pagrindinio CFP: pagrindinis straipsnių terminas dažnai praeina anksti, bet dirbtuvės, tutorialai, Show & Tell, doktorantų konsorciumai, posteriai ir Grand Challenges lieka atviri dar kelis mėnesius (ICASSP 2027 taip davė 5 atvirus kvietimus 2026-09-28).
+
+ŠALTINIAI: https://britishelectroacousticnetwork.com/opportunities/ · https://ulysses-platform.eu/upcoming-and-open-opportunities (VISI puslapiai, ?page=1, ?page=2 …) · https://scorefol.io/opportunities · https://www.musicalchairs.info/composer/competitions · https://on-the-move.org/disciplines/music-sound · https://soundandmusic.org/opportunities/ · https://zkm.de/en/open-calls · https://ars.electronica.art/news/en/opencalls/ · https://societymusictheory.org/events · https://sfmusicologie.fr (annonces) · https://www.musikforschung.de (GfM CfP) · IASPM šakų blogai · AEC naujienos · AUDITORY mailing list archyvas · Frontiers research topics · https://resartis.org ir https://www.transartists.org
+Sezoninės: CTM Festival (patikrink VISUS kvietimus puslapyje /festival-2027/open-calls), ICST ZHdK Ciurichas (skelbiama birželį, terminas rugsėjo 1), BEAST Birmingemas, Gaudeamus, impuls Grācas (ir /academy-2027/special-programs su savais terminais), IRCAM (ir IRCAM Forum Workshops), Darmstädter Ferienkurse, Prix Ars Electronica ir S+T+ARTS (~sausis–kovas), Sónar+D (~vasaris), EMAP, EMAF Osnabriukas, transmediale, Q-O2 ir Overtoon Briuselis, Klang Kopenhaga, Divertimento / IDEA Milanas, Mixtur Barselona, EMS Stokholmas (paraiškos nuo gruodžio 1), Nordic Music Days, Ostrava Days, Métamorphoses, Nordic Culture Point (trys etapai per metus), Nordic–Baltic Sound Residence Network (~pavasaris).
+Culture Moves Europe (https://www.goethe.de/en/kul/foe/cmm.html) — tikrink kas savaitę.
+
+TINKAMUMAS. Žinomos spąstos: kvietimai tik vienos šalies rezidentams (transmediale Pro Helvetia — tik Šveicarija; Vorspiel — tik Berlyne veikiantiems); schemos, neįsileidžiančios BA/MA studentų (EMAP, Nida, VICC, Saari); Šiaurės šalių kvietimai, Baltijos šalis įsileidžiantys tik į dalį kategorijų (Nordic Music Days); mobilumo schemos, neremiančios su studijomis susijusių kelionių (Nordic Culture Point); IRCAM Forum — tik nariams; musicalchairs pilnas mokamų internetinių „sertifikatinių" konkursų — atmesti grupe. Apribojimą visada parašyk aiškiai.
+
+Paieškai gali naudoti kelis lygiagrečius Agent subagentus atskiroms sritims (pvz. konkursai ir akademijos; signalų apdorojimas ir kompiuterinė muzika; muzikologija ir žurnalai; rezidencijos ir mobilumas; atskirai — „Stebėti" sekcijos patikra). Bendrąsias taisykles perduok jiems raštu. Kadangi seni įrašai nebetikrinami, didžiąją laiko dalį skirk naujų paieškai.
+
+
+=== 4. A) SĄRAŠO HTML ===
+
+Toks pat stilius kaip praėjusios savaitės: šviesus/tamsus režimas, navigacijos juosta, kortelės su terminu dešinėje ir „liko N d." ženkleliu, ★ geriausiai tinkantiems. Sekcijos: „Skubu" (terminas per 2 sav.), tada pagal sritį, tada „Stebėti — netrukus atsidaro", tada „Patikrinta ir atmesta — netinka" (tik dar galiojantys, bet netinkami).
+Kiekvienam įrašui: pavadinimas su nuoroda, organizatorius ir šalis, kam tinka, konkreti nauda studentui, terminas, mokestis, amžiaus ribos, kas padengiama, pokytis / pastaba ir eilutė „Rasta per" (source). Konferencijoms — dar trys laukai iš bendrosios taisyklės 5.
+
+Puslapio gale, prieš temos perjungimo <script>, įdėk atnaujintą duomenų bloką <script type="application/json" id="misc-duomenys">…</script> su VISAIS šios savaitės open, watch ir reject įrašais (be pasibaigusių), su visais laukais; "generated" = šiandienos data. JSON viduje „</" pakeisk į „<\/". Patikrink, kad blokas parsinasi (JSON.parse).
+
+Atsiuntęs failą PASKELBK JĮ KAIP ARTEFAKTĄ, kad kita savaitė turėtų iš ko lyginti: Artifact įrankis su url https://claude.ai/code/artifact/80b4777b-9949-4ea2-997b-2390f4804d3e (tas pats URL kas savaitę, nekurk naujo). Prieš skelbdamas nuimk <!DOCTYPE>, <html>, <head> ir <body> žymas — palik nuo <title> iki paskutinio </script>. <title> turi likti nekintantis: „MISC atviri kvietimai" (data eina į puslapio antraštę, ne į <title>). Pridėk `label` su šios dienos data.
+
+
+=== 4b. ATNAUJINK ŠALTINIŲ ATMINTĮ ===
+
+Baigęs paiešką atnaujink /areas/misc-kvietimu-saltiniai.md (perskaityk, tada memory_str_replace arba memory_write su if_version): kiekvienam šaltiniui — kiek atvirų kvietimų davė šią savaitę ir paskutinė produktyvi data; naujus produktyvius pridėk; ilgai tuščius pažymėk „pastaruoju metu nieko"; atnaujink iš debesies nepasiekiamų domenų sąrašą. Failą laikyk glaustą (sutrauk, o ne vien pridėk eilutes). Formatas — kaip jau esantis faile. Jei atminties įrankiai nepasiekiami — tęsk, šaltiniai vis tiek išlieka duomenų bloke.
+
+
+=== 5. B) EKRANO HTML ===
+
+Bazė — perskaitytas šablonas. Keisk TIK masyvą `CALLS`, `CONFIG.updatedLt` / `updatedEn` / `today`, o `CONFIG.checkBadge` nustatyk į false.
+`CONFIG.perPage` PRIVALO likti 4. NIEKADA nedidink — daugiau nei keturi kvietimai viename lape yra pagrindinis dalykas, kurio Edvinas nenori. Kvietimų gali būti kiek nori, lapų skaičius tegul auga savaime.
+NEKEISK maketo, QR generatoriaus, logotipo, spalvų ar temų sistemos.
+
+CALLS = visi status "open" įrašai (perkelti + nauji), surūšiuoti pagal terminą. Kiekvienas įrašas: kind (competition | festival | academy | conference | residency | mobility), titleLt, titleEn, cityLt/cityEn, countryLt/countryEn, countryCode, deadline "MMMM-MM-DD" (arba tuščias + deadlineWordLt/En), descLt ir descEn (1–2 sakiniai, VISKAS abiem kalbomis), topics (2–4 raktai iš TOPICS lentelės faile), url.
+Vien internetu vykstantiems ar tarptautiniams įrašams be aiškios šalies naudok countryCode "XX" (šablono konvencija), cityLt „Internetu" / cityEn „Online".
+
+DVI PATIKROS, abi privalomos:
+  a) Naršyklėje iškviesk `checkData()` ir tęsk tik kai grąžina tuščią sąrašą. (Jos ribos: descLt/descEn iki 165 simbolių, titleLt iki 78, 2–4 temos, countryCode dvi didžiosios raidės.)
+  b) GEOMETRINĖ PATIKRA — checkData() jos NEDARO. Pereik visus lapus (idx=N; render()) ir patikrink, kad kiekvieno `.qrBox` apatinis kraštas neviršija 2160 px, o dešinysis — 3840 px. Jei viršija, kortelė išsikiša už lapo ir jos QR kodas į PDF bei JPEG pateks nukirstas.
+     Dažniausia priežastis (2026-09-28): per ilgas `deadlineWordLt/En` — jis rodomas 362 px pločio šoniniame stulpelyje 34 px šriftu ir lengvai užima pusę kortelės. Taisymo eilė: 1) trumpink deadlineWord iki ~30 simbolių (pvz. „Nepaskelbtas" / „Not announced", detalę palik `note` lauke sąrašui), 2) trumpink titleLt, 3) trumpink descLt/descEn. Kartok, kol problemų 0.
+Patikrink ir kad naršyklės konsolėje nėra klaidų.
+
+
+=== 6. C) IR D) LAPAI: PDF IR JPEG ===
+
+Playwright ir Chromium jau įdiegti (PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers). „playwright install" NEVYKDYK.
+1. Atidaryk ekrano HTML: viewport 3840×2160, device_scale_factor=1.
+2. Sustabdyk vartymą ir animacijas:
+   `CONFIG.autoplay=false; clearInterval(timer); clearInterval(tick); document.getElementById('prog').style.display='none';`
+   ir add_style_tag su `*{animation:none !important;transition:none !important}`.
+3. Kiekvienam lapui: `idx=N;render();`, palauk ~500 ms, screenshot į `NN-<sritis>.png`. Sritis lietuviškai: titulinis, konkursai, festivaliai, akademijos, konferencijos, rezidencijos, mobilumas.
+4. PDF: naudok img2pdf (`pip install img2pdf --break-system-packages`), pagesize (1280, 720) taškų, po vieną lapo paveikslėlį lape. SVARBU: reportlab `drawImage` perkoduoja JPEG į Flate ir išpučia failą ~13 %, todėl duotą kokybę reikia be reikalo mažinti; img2pdf įdeda JPEG be perkodavimo. Kokybę rink mažėjančia tvarka, kol PDF tilps po 29 MB (2026-09-28, 51 lapas: tiko 58).
+5. JPEG: PIL, convert('RGB'), quality=94, subsampling=0, optimize, progressive, 3840×2160. Supakuok į ZIP; jei viena dalis viršytų 29 MB — dalyk į kelias.
+Ilgas bash komandas skaidyk į kelis kvietimus (vienos komandos laiko riba ~2 min; ilgiems naudok timeout 600000).
+
+
+=== 7. PRIVALOMA QR PATIKRA ===
+
+Dekoduok QR kodus iš galutinio PDF IR iš JPEG failų:
+```python
+import numpy as np, cv2, pypdfium2 as pdfium
+det = cv2.QRCodeDetector(); found=set()
+def scan(img):
+    ok, texts, _, _ = det.detectAndDecodeMulti(img)
+    if ok: found.update(t for t in texts if t)
+    th = cv2.threshold(img,200,255,cv2.THRESH_BINARY)[1]
+    cnts,_ = cv2.findContours(th, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for c in cnts:
+        x,y,w,h = cv2.boundingRect(c)
+        if 150<w<800 and 0.8<w/h<1.25:
+            t,_,_ = det.detectAndDecode(img[max(0,y-12):y+h+12, max(0,x-12):x+w+12])
+            if t: found.add(t)
+pdf = pdfium.PdfDocument(PDF_PATH)
+for i in range(len(pdf)):
+    scan(np.array(pdf[i].render(scale=3).to_pil().convert('L')))
+for j in sorted(JPG_DIR.glob('*.jpg')):
+    scan(cv2.imread(str(j), cv2.IMREAD_GRAYSCALE))
+```
+Palygink `found` su visų open įrašų url (unikaliais — keli įrašai gali dalintis vienu url). Trūkstant bent vieno — taisyk ir kartok.
+
+Trūkstamo QR diagnozė, šia eilės tvarka:
+  1) Ar kortelė telpa lape? Paleisk §5 geometrinę patikrą — dažniausiai QR ne „blogas", o tiesiog nukirstas.
+  2) ŽINOMA ŠABLONO KLAIDA: retais atvejais generatorius sukuria nenuskaitomą kodą, nors `checkData()` švarus. 2026-09-07 — „https://positiveambisonics.org/" su pasvirčiu gale nedekoduojasi, be pasvirčio veikia; 2026-09-21 — ilgi URL (IRCAM Forum su pasvirčiu, Theia PDF); 2026-09-28 — „https://www.mdpi.com/journal/arts/special_issues/3u4u17wcqe" su „www." nedekoduojasi, be „www." veikia. Bandyk tą pačią nuorodą be pasvirčio gale, be „www.", arba trumpesnę organizatoriaus nuorodą (pvz. pagrindinį puslapį, kuriame kvietimas matomas). Generatoriaus šablone NEKEISK. Pakeistą url įrašyk ir į duomenų bloką, ir pastabą į `note`.
+
+
+=== 8. ATSAKYMAS ===
+
+Atsakyme lietuviškai 3–6 sakiniai: kiek perkelta be pakartotinio tikrinimo, kiek naujų ir iš kokių šaltinių daugiausia, kas baigėsi ir buvo išmesta (kad Edvinas ištrintų), kas skubiausia (terminas per 2 savaites), kiek iš viso kvietimų ir kiek lapų turi ekrano versija. Neperpasakok viso sąrašo.
+Pabaigoje viena eilute: „Failus išsaugokite į Open calls misc / <data>."

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Map") }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+{% endblock %}
+{% block content %}
+<h1>{{ _("Calls by location") }}</h1>
+<p class="sub">{{ total }} {{ _("calls") }} · <a href="{{ url_for('main.index', **request.args) }}">{{ _("Open calls") }} →</a></p>
+<div id="map"></div>
+{% if online %}
+<section class="panel"><h2>🌐 {{ _("Online / international") }} ({{ online|length }})</h2>
+<ul class="plain">{% for i in online %}<li><a href="{{ url_for('main.detail', call_id=i.id) }}">{{ i.t }}</a> <small>{{ i.d }}</small></li>{% endfor %}</ul></section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+var POINTS = {{ points|tojson }}, base = "{{ url_for('main.detail', call_id=0) }}".replace(/0$/, '');
+var map = L.map('map', {scrollWheelZoom:false}).setView([50, 15], 4);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 8,
+  attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+POINTS.forEach(function(p){
+  var n = p.items.length, r = 8 + Math.sqrt(n) * 5;
+  var urgent = p.items.some(function(i){return i.p==='closing_soon'||i.p==='due_today'});
+  var html = '<b>' + esc(p.name) + '</b> (' + n + ')<ul class="mappop">' + p.items.map(function(i){
+    return '<li><a href="' + base + i.id + '">' + esc(i.t) + '</a>' + (i.d ? ' <small>' + i.d + '</small>' : '') + '</li>'}).join('') + '</ul>';
+  L.circleMarker([p.lat, p.lon], {radius: r, color: urgent ? '#c4362c' : '#2c5fd0', weight: 2, fillOpacity: .35})
+   .bindTooltip(p.name + ': ' + n).bindPopup(html, {maxHeight: 320}).addTo(map);
+});
+</script>
+{% endblock %}

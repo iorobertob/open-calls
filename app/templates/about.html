@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{{ _("About") }}{% endblock %}
+{% block content %}
+<section class="panel prose">
+{% if lang == 'lt' %}
+<h1>Apie šį sąrašą</h1>
+<p>Sąrašą kuruoja LMTA Muzikos inovacijų studijų centras (MISC). Jame — konferencijos, kvietimai teikti pranešimus ir straipsnius, žurnalų teminiai numeriai, konkursai, festivaliai, akademijos, rezidencijos ir mobilumo schemos, tinkančios LMTA studentams, doktorantams, dėstytojams, menininkams ir tyrėjams.</p>
+<h2>Atrankos kriterijai</h2>
+<ul>
+<li><b>Sritys:</b> medijų menas, skaitmeninė muzika ir garso menas, AI menas; elektroakustinė muzika; muzikos technologijos, instaliacijos; menas–mokslas–technologijos; erdvinis, imersinis ir VR/AR garsas; kompiuterinė, algoritminė ir elektroninė muzika; tradicinė ir instrumentinė kompozicija; muzikologija ir meninis tyrimas.</li>
+<li><b>Konferencijos ir žurnalai</b> — viso pasaulio, bet kokio formato.</li>
+<li><b>Akademijos, dirbtuvės ir rezidencijos</b> — viso pasaulio, jei Lietuvos / ES gyventojas realiai gali dalyvauti (nurodoma vizų, kelionės ir finansavimo realybė).</li>
+<li><b>Konkursai, festivaliai ir mobilumas</b> — ES, Erasmus+ šalys, Šveicarija, Norvegija, Islandija ir JK.</li>
+<li>Kiekvienas įrašas tikrinamas oficialiame organizatoriaus puslapyje, ne agregatoriuje.</li>
+</ul>
+<h2>Kaip veikia</h2>
+<ul>
+<li><b>Būsenos</b> skaičiuojamos kasdien pagal datas: <span class="badge ph-open">atviras</span> <span class="badge ph-closing_soon">greitai baigiasi</span> (≤ {{ URGENT_DAYS }} d.) <span class="badge ph-upcoming">netrukus atsidaro</span> <span class="badge ph-closed">pasibaigęs</span>.</li>
+<li>Sistema periodiškai atidaro organizatorių puslapius, pastebi pasikeitimus ir atnaujina terminus; pakeitimus peržiūri koordinatorius.</li>
+<li><b>Be paskyros</b> galite atsisiųsti kalendoriaus failą (.ics) arba prenumeruoti bet kurį filtruotą sąrašą savo kalendoriuje.</li>
+<li><b>Prisijungę su LMTA paskyra</b> galite prenumeruoti atskirus kvietimus — jie atsiras jūsų asmeniniame kalendoriaus sraute su priminimais likus 7 d. ir 1 d.</li>
+</ul>
+{% else %}
+<h1>About this list</h1>
+<p>The list is curated by the Music Innovation Studies Centre (MISC) of the Lithuanian Academy of Music and Theatre. It collects conferences, calls for papers and articles, journal special issues, competitions, festivals, academies, residencies and mobility schemes relevant to LMTA students, doctoral candidates, teachers, artists and researchers.</p>
+<h2>Selection criteria</h2>
+<ul>
+<li><b>Fields:</b> media art, digital music and sound art, AI art; electroacoustic music; music technology, installations; art–science–technology; spatial, immersive and VR/AR audio; computer, algorithmic and electronic music; traditional and instrumental composition; musicology and artistic research.</li>
+<li><b>Conferences and journals</b> — worldwide, any format.</li>
+<li><b>Academies, workshops and residencies</b> — worldwide, where a Lithuanian/EU resident can realistically take part (visa, travel and funding notes included).</li>
+<li><b>Competitions, festivals and mobility</b> — EU, Erasmus+ countries, Switzerland, Norway, Iceland and the UK.</li>
+<li>Every entry is verified on the organiser's official page, not an aggregator.</li>
+</ul>
+<h2>How it works</h2>
+<ul>
+<li><b>Statuses</b> are recalculated daily from dates: <span class="badge ph-open">open</span> <span class="badge ph-closing_soon">closing soon</span> (≤ {{ URGENT_DAYS }} days) <span class="badge ph-upcoming">opens soon</span> <span class="badge ph-closed">closed</span>.</li>
+<li>The system periodically re-reads organisers' pages, detects changes and updates deadlines; changes are reviewed by the coordinator.</li>
+<li><b>Without an account</b> you can download a calendar file (.ics) or subscribe to any filtered list in your calendar app.</li>
+<li><b>With your LMTA account</b> you can subscribe to individual calls — they appear in your personal calendar feed with reminders 7 days and 1 day before.</li>
+</ul>
+{% endif %}
+</section>
+{% endblock %}

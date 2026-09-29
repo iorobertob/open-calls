@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ c.title(lang) }}{% endblock %}
+{% block content %}
+<p class="back"><a href="{{ request.referrer if request.referrer and '/call/' not in request.referrer else url_for('main.index') }}">← {{ _("Back to list") }}</a></p>
+<article class="detail" style="--kh:{{ KINDS.get(c.kind, KINDS['other']).hue }}">
+  <div class="dhead">
+    <div>
+      <div class="meta-top">
+        <span class="kind">{{ KINDS.get(c.kind, KINDS['other'])['short_' ~ lang] }}</span>
+        {% if c.star %}<span class="star">★</span>{% endif %}
+        {{ m.phase_badge(c) }}
+      </div>
+      <h1>{{ c.title(lang) }}</h1>
+      {% set other = c.title_en if lang == 'lt' else c.title_lt %}
+      {% if other and other != c.title(lang) %}<p class="ten">{{ other }}</p>{% endif %}
+      <p class="org">{{ c.country_code|flag }} {{ c.org }}{% if c.city(lang) %} · {{ c.city(lang) }}{% endif %}{% if c.country(lang) %}, {{ c.country(lang) }}{% endif %}</p>
+    </div>
+    <div class="dbox">
+      {% if c.deadline %}<small>{{ _("Deadline") }}</small><b class="big">{{ c.deadline|fmtdate(lang) }}</b>
+      {% elif c.deadline_word(lang) %}<b>{{ c.deadline_word(lang) }}</b>{% endif %}
+      {% if c.event_start %}<small>{{ _("Event dates") }}</small><span>{{ c.event_start|fmtdate(lang) }}{% if c.event_end and c.event_end != c.event_start %} – {{ c.event_end|fmtdate(lang) }}{% endif %}</span>{% endif %}
+      <div class="acts col">
+        {% if c.url %}<a class="btn primary" href="{{ c.url }}" target="_blank" rel="noopener">{{ _("Official page") }} ↗</a>{% endif %}
+        {% if c.deadline or c.event_start %}<a class="btn" href="{{ url_for('main.call_ics', call_id=c.id) }}">📅 {{ _("Add to calendar") }}</a>{% endif %}
+        {{ m.subscribe_button(c, request.path) }}
+        {% if user.is_authenticated and user.is_admin %}<a class="btn ghost" href="{{ url_for('admin.edit', call_id=c.id) }}">✎ {{ _("Edit") }}</a>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if c.desc(lang) %}<p class="lead">{{ c.desc(lang) }}</p>{% endif %}
+  <div class="topics">{% for t in c.topic_list %}<a class="topic fam-{{ TOPICS.get(t, ('ctx',))[0] }}" href="{{ url_for('main.index', topic=t) }}">{{ topic_label(t, lang) }}</a>{% endfor %}</div>
+
+  <dl class="facts">
+    {% for label, val in [('Who it suits', c.kam_tinka), ('Benefit', c.nauda), ('Fee', c.mokestis), ('Age limits', c.amzius),
+                          ('Covered', c.padengiama), ('Remote', c.nuotoliu), ('Registration', c.registracija),
+                          ('Student discount', c.studentu_nuolaida), ('Note', c.note)] if val %}
+      <dt>{{ _(label) }}</dt><dd>{{ val }}</dd>
+    {% endfor %}
+  </dl>
+  {% if lang == 'en' and (c.kam_tinka or c.nauda) %}<p class="hint">Detailed notes are written by the MISC coordinator in Lithuanian.</p>{% endif %}
+
+  <p class="prov">
+    {% if not c.verified %}<b>⚠ {{ _("Not verified — open manually") }}</b> · {% endif %}
+    {% if c.source %}{{ _("Found via") }}: {% if c.source_url %}<a href="{{ c.source_url }}" rel="noopener">{{ c.source }}</a>{% else %}{{ c.source }}{% endif %} · {% endif %}
+    {% if c.first_seen %}{{ _("First seen") }}: {{ c.first_seen }} · {% endif %}
+    {% if c.last_verified %}{{ _("Last verified") }}: {{ c.last_verified }}{% endif %}
+  </p>
+
+  {% if user.is_authenticated and user.is_admin and c.changes %}
+  <details class="history"><summary>{{ _("History") }} ({{ c.changes|length }})</summary>
+    <table>{% for ch in c.changes[:50] %}<tr><td>{{ ch.at.strftime('%Y-%m-%d') }}</td><td>{{ ch.origin }}</td><td>{{ ch.field }}</td><td>{{ ch.old|truncate(60) }}</td><td>→ {{ ch.new|truncate(60) }}</td><td>{{ ch.note }}</td></tr>{% endfor %}</table>
+  </details>
+  {% endif %}
+</article>
+{% endblock %}

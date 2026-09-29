@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ _("MISC open calls") }}{% endblock %} · LMTA</title>
+<link rel="icon" href="{{ url_for('static', filename='misc-logo.png') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+{% block head %}{% endblock %}
+</head>
+<body>
+<header class="top">
+  <div class="in">
+    <a class="brand" href="{{ url_for('main.index') }}">
+      <img src="{{ url_for('static', filename='misc-logo.png') }}" alt="MISC" width="40" height="40">
+      <span><b>{{ _("Open calls") }}</b><small>MISC · {{ _("Lithuanian Academy of Music and Theatre") }}</small></span>
+    </a>
+    <nav class="menu">
+      <a href="{{ url_for('main.index') }}">{{ _("Open calls") }}</a>
+      <a href="{{ url_for('main.map_view') }}">{{ _("Map") }}</a>
+      <a href="{{ url_for('main.about') }}">{{ _("About") }}</a>
+      {% if user.is_authenticated %}
+        <a href="{{ url_for('main.my') }}">{{ _("My subscriptions") }}</a>
+        <a href="{{ url_for('main.suggest') }}">{{ _("Suggest a call") }}</a>
+        {% if user.is_admin %}<a href="{{ url_for('admin.dashboard') }}" class="adm">{{ _("Admin") }}</a>{% endif %}
+      {% endif %}
+    </nav>
+    <div class="tools">
+      <a class="pill" href="{{ url_for('main.set_lang', code='en' if lang == 'lt' else 'lt') }}">{{ 'EN' if lang == 'lt' else 'LT' }}</a>
+      <button class="pill" id="theme" type="button" aria-label="Theme">◐</button>
+      {% if user.is_authenticated %}
+        <a class="pill" href="{{ url_for('auth.logout') }}" title="{{ _('Logged in as') }} {{ user.email }}">{{ _("Log out") }}</a>
+      {% else %}
+        <a class="pill primary" href="{{ url_for('auth.login', next=request.full_path) }}">{{ _("Log in") }}</a>
+      {% endif %}
+    </div>
+  </div>
+</header>
+<main class="wrap">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="foot wrap">
+  <span>© LMTA · <a href="https://misc.lmta.lt">Music Innovation Studies Centre</a></span>
+  <span><a href="{{ url_for('main.api_export') }}">JSON</a> · <a href="{{ url_for('main.screen') }}">TV</a></span>
+</footer>
+<script>
+document.getElementById('theme').onclick=function(){var r=document.documentElement,
+ cur=r.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'),
+ nx=cur==='dark'?'light':'dark';r.dataset.theme=nx;try{localStorage.setItem('theme',nx)}catch(e){}};
+document.querySelectorAll('[data-copy]').forEach(function(b){b.onclick=function(){
+ var el=document.getElementById(b.dataset.copy);el.select();try{navigator.clipboard.writeText(el.value)}catch(e){document.execCommand('copy')}
+ b.textContent='✓';}});
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

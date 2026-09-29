@@ -1,0 +1,12 @@
+# /etc/systemd/system/opencalls-refresh.timer
+# systemctl enable --now opencalls-refresh.timer
+[Unit]
+Description=Daily refresh of MISC open calls
+
+[Timer]
+OnCalendar=*-*-* 04:15:00 Europe/Vilnius
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

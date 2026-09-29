@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block content %}
+<section class="hero">
+  <h1>{{ _("MISC open calls") }}</h1>
+  <p class="sub">{{ _("Calls, conferences, journals, residencies and competitions for LMTA students, teachers, artists and researchers.") }}</p>
+</section>
+
+<form class="filters" method="get" id="filters">
+  <div class="searchrow">
+    <input type="search" name="q" value="{{ f.q }}" placeholder="{{ _('Search titles, organisers, descriptions…') }}" aria-label="{{ _('Search') }}">
+    <select name="show" aria-label="{{ _('Status') }}">
+      {% for k, label in [('active', 'Active (open + upcoming)'), ('urgent', 'Closing within 14 days'), ('open', 'Open now'),
+                          ('upcoming', 'Opens soon'), ('closed', 'Closed'), ('rejected', 'Checked — not eligible'), ('all', 'Everything')] %}
+        <option value="{{ k }}" {{ 'selected' if f.show == k }}>{{ _(label) }}</option>
+      {% endfor %}
+    </select>
+    <select name="sort" aria-label="{{ _('Sort') }}">
+      {% for k, label in [('deadline', 'Soonest deadline'), ('new', 'Recently added'), ('title', 'Title')] %}
+        <option value="{{ k }}" {{ 'selected' if f.sort == k }}>{{ _(label) }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn primary">{{ _("Filter") }}</button>
+  </div>
+
+  <div class="kinds" role="group" aria-label="{{ _('Type') }}">
+    {% for k in KIND_ORDER if kind_counts.get(k) or k in f.kinds %}
+      <label class="chip" style="--kh:{{ KINDS[k].hue }}">
+        <input type="checkbox" name="kind" value="{{ k }}" {{ 'checked' if k in f.kinds }} data-auto>
+        <span>{{ KINDS[k][lang] }} <em>{{ kind_counts.get(k, 0) }}</em></span>
+      </label>
+    {% endfor %}
+  </div>
+
+  <details class="more" {{ 'open' if f.topics or f.family or f.region or f.country or f.date_from or f.date_to or f.star or f.remote or f.free or f.mine }}>
+    <summary>{{ _("More filters") }}</summary>
+    <div class="grid">
+      <label>{{ _("Area") }}
+        <select name="family" data-auto><option value="">{{ _("Any") }}</option>
+          {% for k, v in FAMILIES.items() %}<option value="{{ k }}" {{ 'selected' if f.family == k }}>{{ v[lang] }}</option>{% endfor %}
+        </select></label>
+      <label>{{ _("Region") }}
+        <select name="region" data-auto><option value="">{{ _("Any") }}</option>
+          {% for k, v in REGIONS.items() %}<option value="{{ k }}" {{ 'selected' if f.region == k }}>{{ v[lang] }}</option>{% endfor %}
+        </select></label>
+      <label>{{ _("Country") }}
+        <select name="country" data-auto><option value="">{{ _("Any") }}</option>
+          {% for code in countries %}<option value="{{ code }}" {{ 'selected' if f.country == code }}>{{ code|flag }} {{ country_name(code, lang) }}</option>{% endfor %}
+        </select></label>
+      <label>{{ _("Deadline from") }}<input type="date" name="from" value="{{ f.date_from or '' }}"></label>
+      <label>{{ _("Deadline to") }}<input type="date" name="to" value="{{ f.date_to or '' }}"></label>
+      <div class="checks">
+        <label><input type="checkbox" name="star" value="1" {{ 'checked' if f.star }} data-auto> ★ {{ _("Best fit only") }}</label>
+        <label><input type="checkbox" name="remote" value="1" {{ 'checked' if f.remote }} data-auto> {{ _("Remote participation") }}</label>
+        <label><input type="checkbox" name="free" value="1" {{ 'checked' if f.free }} data-auto> {{ _("Free to apply") }}</label>
+        {% if user.is_authenticated %}<label><input type="checkbox" name="mine" value="1" {{ 'checked' if f.mine }} data-auto> {{ _("My subscriptions") }}</label>{% endif %}
+      </div>
+    </div>
+    <fieldset class="topicpick">
+      <legend>{{ _("Discipline") }}</legend>
+      {% for fam, fv in FAMILIES.items() %}
+        <div class="fam"><span>{{ fv[lang] }}</span>
+        {% for t, tv in TOPICS.items() if tv[0] == fam %}
+          <label class="topic fam-{{ fam }} {{ 'sel' if t in f.topics }}"><input type="checkbox" name="topic" value="{{ t }}" {{ 'checked' if t in f.topics }} data-auto>{{ topic_label(t, lang) }}</label>
+        {% endfor %}</div>
+      {% endfor %}
+    </fieldset>
+  </details>
+</form>
+
+<div class="resultbar">
+  <div><b>{{ calls|length }}</b> {{ _("results") }}{% if urgent %} · <span class="urgtxt">{{ urgent }} {{ _("Closing within 14 days")|lower }}</span>{% endif %}
+    {% if not f.is_default %} · <a href="{{ url_for('main.index') }}">{{ _("Reset") }}</a>{% endif %}</div>
+  <div class="calacts">
+    <a class="btn ghost" href="{{ url_for('main.calendar_download') }}{{ '?' ~ query_string if query_string }}">📅 {{ _("Download calendar (.ics)") }}</a>
+    <details class="subfeed">
+      <summary class="btn ghost">🔔 {{ _("Subscribe to this list") }}</summary>
+      <div class="pop">
+        <b>{{ _("Subscribe without an account") }}</b>
+        <p>{{ _("Copy the link below into your calendar app to follow this filtered list; it updates automatically.") }}</p>
+        {% set feed = url_for('main.calendar_feed', _external=True) ~ '?' ~ (query_string ~ '&' if query_string) ~ 'lang=' ~ lang %}
+        <div class="copyrow"><input id="feedurl" readonly value="{{ feed }}"><button type="button" class="btn" data-copy="feedurl">{{ _("Copy") }}</button></div>
+        <a class="btn" href="{{ feed|replace('https://', 'webcal://')|replace('http://', 'webcal://') }}">{{ _("Open in Outlook / Apple Calendar") }}</a>
+      </div>
+    </details>
+  </div>
+</div>
+
+<div class="cards">
+  {% set here = request.full_path %}
+  {% for c in calls %}{{ m.card(c, here) }}{% else %}<p class="empty">{{ _("No calls match these filters.") }}</p>{% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll('[data-auto]').forEach(function(el){el.addEventListener('change',function(){document.getElementById('filters').submit()})});
+document.querySelectorAll('#filters select[name=show], #filters select[name=sort]').forEach(function(el){el.addEventListener('change',function(){el.form.submit()})});
+</script>
+{% endblock %}

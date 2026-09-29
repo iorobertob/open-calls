@@ -1,0 +1,57 @@
+{% macro phase_badge(c) -%}
+  {%- set p = c.phase() -%}{%- set n = c.days_left() -%}
+  <span class="badge ph-{{ p }}">
+  {%- if p == 'due_today' -%}{{ _("Due today") }}
+  {%- elif p in ('closing_soon', 'open') -%}{{ n }} {{ _("day left") if n == 1 else _("days left") }}
+  {%- elif p == 'rolling' -%}{{ _("Rolling") }}
+  {%- elif p == 'upcoming' -%}{{ _("Opens soon") }}
+  {%- elif p == 'closed' -%}{{ _("Closed") }}
+  {%- elif p == 'rejected' -%}{{ _("Not eligible") }}
+  {%- elif p == 'pending' -%}{{ _("Pending review") }}{%- endif -%}
+  </span>
+{%- endmacro %}
+
+{% macro subscribe_button(c, next_url) -%}
+  {% if user.is_authenticated %}
+    {% set sub = user.is_subscribed(c) %}
+    <form method="post" action="{{ url_for('main.unsubscribe' if sub else 'main.subscribe', call_id=c.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="next" value="{{ next_url }}">
+      <button class="btn {{ 'on' if sub else '' }}" title="{{ _('Unsubscribe') if sub else _('Subscribe') }}">
+        {{ '★ ' ~ _('Subscribed') if sub else '☆ ' ~ _('Subscribe') }}</button>
+    </form>
+  {% else %}
+    <a class="btn ghost" href="{{ url_for('auth.login', next=next_url) }}" title="{{ _('Log in to subscribe') }}">☆ {{ _("Subscribe") }}</a>
+  {% endif %}
+{%- endmacro %}
+
+{% macro card(c, next_url) %}
+{% set p = c.phase() %}
+<article class="card {{ 'dim' if p in ('closed', 'rejected') }} {{ 'urgent' if p in ('due_today', 'closing_soon') }}"
+         style="--kh:{{ KINDS.get(c.kind, KINDS['other']).hue }}">
+  <div class="cmain">
+    <div class="meta-top">
+      <span class="kind">{{ KINDS.get(c.kind, KINDS['other'])['short_' ~ lang] }}</span>
+      {% if c.star %}<span class="star" title="Best fit">★</span>{% endif %}
+      {% if not c.verified %}<span class="unver" title="{{ _('Not verified — open manually') }}">?</span>{% endif %}
+    </div>
+    <h3><a href="{{ url_for('main.detail', call_id=c.id) }}">{{ c.title(lang) }}</a></h3>
+    <div class="org">{{ c.country_code|flag }} {{ c.org }}{% if c.city(lang) %} · {{ c.city(lang) }}{% endif %}{% if c.country(lang) %}, {{ c.country(lang) }}{% endif %}</div>
+    {% if c.desc(lang) %}<p class="desc">{{ c.desc(lang) }}</p>{% endif %}
+    <div class="topics">
+      {% for t in c.topic_list %}<a class="topic fam-{{ TOPICS.get(t, ('ctx',))[0] }}" href="{{ url_for('main.index', topic=t) }}">{{ topic_label(t, lang) }}</a>{% endfor %}
+    </div>
+  </div>
+  <aside class="cside">
+    <div class="dl">
+      {% if c.deadline %}<small>{{ _("Deadline") }}</small><b>{{ c.deadline|fmtdate(lang) }}</b>
+      {% elif c.deadline_word(lang) %}<b class="word">{{ c.deadline_word(lang) }}</b>{% endif %}
+    </div>
+    {{ phase_badge(c) }}
+    <div class="acts">
+      {% if c.deadline or c.event_start %}<a class="btn ghost" href="{{ url_for('main.call_ics', call_id=c.id) }}" title="{{ _('Add to calendar') }}">📅 .ics</a>{% endif %}
+      {{ subscribe_button(c, next_url) }}
+    </div>
+  </aside>
+</article>
+{% endmacro %}

@@ -1,15 +1,17 @@
-# /etc/systemd/system/opencalls.service
+# /etc/systemd/system/opencalls.service (rendered by remote-install.sh)
 [Unit]
 Description=MISC open calls (gunicorn)
-After=network.target postgresql.service
+After=network.target
 
 [Service]
-User=opencalls
-Group=www-data
-WorkingDirectory=/srv/opencalls
-EnvironmentFile=/srv/opencalls/.env
-ExecStart=/srv/opencalls/.venv/bin/gunicorn -w 3 -b 127.0.0.1:8010 --timeout 120 --access-logfile - wsgi:app
+User=__APP_USER__
+Group=__APP_USER__
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=__APP_DIR__/.env
+ExecStart=__APP_DIR__/.venv/bin/gunicorn -w 3 -b 127.0.0.1:__APP_PORT__ --timeout 120 --access-logfile - wsgi:app
 Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target

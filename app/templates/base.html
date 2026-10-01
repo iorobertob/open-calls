@@ -28,7 +28,7 @@
     </nav>
     <div class="tools">
       <a class="pill" href="{{ url_for('main.set_lang', code='en' if lang == 'lt' else 'lt') }}">{{ 'EN' if lang == 'lt' else 'LT' }}</a>
-      <button class="pill" id="theme" type="button" aria-label="Theme">◐</button>
+      <button class="pill" id="theme" type="button" aria-label="{{ _('Theme') }}">◐</button>
       {% if user.is_authenticated %}
         <a class="pill" href="{{ url_for('auth.logout') }}" title="{{ _('Logged in as') }} {{ user.email }}">{{ _("Log out") }}</a>
       {% else %}
@@ -44,7 +44,7 @@
   {% block content %}{% endblock %}
 </main>
 <footer class="foot wrap">
-  <span>© LMTA · <a href="https://misc.lmta.lt">Music Innovation Studies Centre</a></span>
+  <span>© LMTA · <a href="https://misc.lmta.lt">{{ _("Music Innovation Studies Centre") }}</a></span>
   <span><a href="{{ url_for('main.api_export') }}">JSON</a> · <a href="{{ url_for('main.screen') }}">TV</a></span>
 </footer>
 <script>

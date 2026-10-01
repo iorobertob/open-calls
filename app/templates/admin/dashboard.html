@@ -1,60 +1,63 @@
 {% extends "base.html" %}
-{% block title %}Admin{% endblock %}
+{% block title %}{{ _("Admin") }}{% endblock %}
+{% set ACTION_LABELS = {'approve': 'Approve', 'delete': 'Delete', 'reviewed': 'Mark reviewed', 'recheck': 'Re-check', 'archive': 'Archive'} %}
+{% set STATUS_LABELS = {'open': 'Open', 'watch': 'Opens soon', 'reject': 'Not eligible', 'pending': 'Pending review', 'archived': 'Archived'} %}
 {% macro row(c, actions) %}
 <tr>
   <td><a href="{{ url_for('main.detail', call_id=c.id) }}">{{ c.title(lang)|truncate(80) }}</a><br>
-    <small>{{ c.kind }} · {{ c.deadline or c.deadline_word(lang) }} · <a href="{{ c.url }}" target="_blank" rel="noopener">{{ c.url|truncate(50) }}</a></small>
-    {% if c.review_reason %}<pre class="reason">{{ c.review_reason }}</pre>{% endif %}</td>
+    <small>{{ KINDS.get(c.kind, KINDS['other'])['short_' ~ lang] }} · {{ c.deadline or c.deadline_word(lang) }} · <a href="{{ c.url }}" target="_blank" rel="noopener">{{ c.url|truncate(50) }}</a></small>
+    {% if c.review_reason %}<pre class="reason">{{ c.review_reason|sysmsg }}</pre>{% endif %}</td>
   <td class="acts">
-    <a class="btn ghost" href="{{ url_for('admin.edit', call_id=c.id) }}">Edit</a>
+    <a class="btn ghost" href="{{ url_for('admin.edit', call_id=c.id) }}">{{ _("Edit") }}</a>
     {% for a in actions %}
-    <form method="post" action="{{ url_for('admin.action', call_id=c.id) }}" {% if a == 'delete' %}onsubmit="return confirm('Delete permanently?')"{% endif %}>
+    <form method="post" action="{{ url_for('admin.action', call_id=c.id) }}" {% if a == 'delete' %}onsubmit="return confirm('{{ _('Delete permanently?') }}')"{% endif %}>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="{{ a }}">
-      <button class="btn {{ 'primary' if a in ('approve', 'reviewed') }}">{{ a }}</button></form>
+      <button class="btn {{ 'primary' if a in ('approve', 'reviewed') }}">{{ _(ACTION_LABELS[a]) }}</button></form>
     {% endfor %}
   </td>
 </tr>
 {% endmacro %}
 {% block content %}
-<h1>Admin</h1>
+<h1>{{ _("Admin") }}</h1>
 <div class="stats">
-  {% for s, n in stats.items() %}<a class="stat" href="{{ url_for('main.index', show={'open':'open','watch':'upcoming','reject':'rejected','archived':'closed'}.get(s, 'all')) }}"><b>{{ n }}</b>{{ s }}</a>{% endfor %}
-  <span class="stat"><b>{{ 'on' if llm else 'off' }}</b>Claude API</span>
+  {% for s, n in stats.items() %}<a class="stat" href="{{ url_for('main.index', show={'open':'open','watch':'upcoming','reject':'rejected','archived':'closed'}.get(s, 'all')) }}"><b>{{ n }}</b>{{ _(STATUS_LABELS[s]) }}</a>{% endfor %}
+  <span class="stat"><b>{{ _("on") if llm else _("off") }}</b>Claude API</span>
+  <span class="stat"><b>{{ untranslated }}</b>{{ _("Untranslated entries") }}</span>
 </div>
 
 <div class="admin-grid">
   <section class="panel">
-    <h2>Add by link</h2>
-    <form method="post" action="{{ url_for('admin.import_url') }}" class="stack" onsubmit="this.querySelector('button').textContent='Reading page…'">
+    <h2>{{ _("Add by link") }}</h2>
+    <form method="post" action="{{ url_for('admin.import_url') }}" class="stack" onsubmit="this.querySelector('button').textContent='{{ _('Reading page…') }}'">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="url" name="url" required placeholder="https://organiser.org/open-call">
-      <button class="btn primary">Extract &amp; review</button>
+      <button class="btn primary">{{ _("Extract & review") }}</button>
     </form>
-    <p><a href="{{ url_for('admin.new') }}">+ Add manually</a> · <a href="{{ url_for('admin.users') }}">Users</a></p>
+    <p><a href="{{ url_for('admin.new') }}">+ {{ _("Add manually") }}</a> · <a href="{{ url_for('admin.users') }}">{{ _("Users") }}</a></p>
   </section>
   <section class="panel">
-    <h2>Import weekly list</h2>
-    <p class="hint">Upload the weekly <code>MISC-sarasas-&lt;date&gt;.html</code> (or its JSON). Entries are merged by URL + title; expired ones skipped.</p>
+    <h2>{{ _("Import weekly list") }}</h2>
+    <p class="hint">{{ _("Upload the weekly MISC-sarasas-<date>.html (or its JSON). Entries are merged by URL + title; expired ones are skipped.") }}</p>
     <form method="post" action="{{ url_for('admin.import_data') }}" enctype="multipart/form-data" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="file" name="file" accept=".html,.json" required><button class="btn">Import</button>
+      <input type="file" name="file" accept=".html,.json" required><button class="btn">{{ _("Import") }}</button>
     </form>
   </section>
   <section class="panel">
-    <h2>Refresh now</h2>
-    <p class="hint">Archives expired entries and re-checks the least recently checked pages. Runs daily automatically.</p>
+    <h2>{{ _("Refresh now") }}</h2>
+    <p class="hint">{{ _("Archives expired entries, fills missing translations and re-checks the least recently checked pages. Runs daily automatically.") }}</p>
     <form method="post" action="{{ url_for('admin.refresh') }}" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Pages to check <input type="number" name="limit" value="10" min="1" max="200"></label><button class="btn">Run</button>
+      <label>{{ _("Pages to check") }} <input type="number" name="limit" value="10" min="1" max="200"></label><button class="btn">{{ _("Run") }}</button>
     </form>
-    {% for r in runs %}<details><summary><small>{{ r.started_at.strftime('%Y-%m-%d %H:%M') }} — checked {{ r.checked }}, changed {{ r.changed }}, errors {{ r.errors }}</small></summary><pre class="reason">{{ r.log }}</pre></details>{% endfor %}
+    {% for r in runs %}<details><summary><small>{{ r.started_at.strftime('%Y-%m-%d %H:%M') }} — {{ _("Checked {0}, changed {1}, errors {2}").format(r.checked, r.changed, r.errors) }}</small></summary><pre class="reason">{{ r.log }}</pre></details>{% endfor %}
   </section>
 </div>
 
-<section class="panel"><h2>Suggestions waiting for approval ({{ pending|length }})</h2>
+<section class="panel"><h2>{{ _("Suggestions waiting for approval") }} ({{ pending|length }})</h2>
   <table class="adm">{% for c in pending %}{{ row(c, ['approve', 'delete']) }}{% else %}<tr><td>—</td></tr>{% endfor %}</table></section>
-<section class="panel"><h2>Automatic changes to review ({{ review|length }})</h2>
+<section class="panel"><h2>{{ _("Automatic changes to review") }} ({{ review|length }})</h2>
   <table class="adm">{% for c in review %}{{ row(c, ['reviewed', 'recheck', 'archive']) }}{% else %}<tr><td>—</td></tr>{% endfor %}</table></section>
-<section class="panel"><h2>Broken links ({{ broken|length }})</h2>
+<section class="panel"><h2>{{ _("Broken links") }} ({{ broken|length }})</h2>
   <table class="adm">{% for c in broken %}{{ row(c, ['recheck', 'archive']) }}{% else %}<tr><td>—</td></tr>{% endfor %}</table></section>
 {% endblock %}

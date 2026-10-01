@@ -23,6 +23,12 @@ def today():
 STATUSES = ("open", "watch", "reject", "pending", "archived")
 
 # Display phases, computed from dates on every request so the UI is always current.
+# Detail fields stored as <name> (Lithuanian) + <name>_en (English).
+DETAIL_FIELDS = ("kam_tinka", "nauda", "mokestis", "amzius", "padengiama", "nuotoliu", "registracija",
+                 "studentu_nuolaida", "note")
+# Short bilingual pairs stored as <name>_lt / <name>_en.
+PAIR_FIELDS = ("title", "desc", "city", "country", "deadline_word")
+
 PHASES = ("due_today", "closing_soon", "open", "rolling", "upcoming", "closed", "rejected", "pending")
 
 
@@ -63,6 +69,17 @@ class Call(db.Model):
     registracija = db.Column(db.Text, default="")      # registration fee (conferences)
     studentu_nuolaida = db.Column(db.Text, default="")  # student discount (conferences)
     note = db.Column(db.Text, default="")
+    # English versions of the detail fields (the curator writes them in Lithuanian; `flask translate`
+    # or the refresh job fills the missing language with Claude).
+    kam_tinka_en = db.Column(db.Text, default="")
+    nauda_en = db.Column(db.Text, default="")
+    mokestis_en = db.Column(db.Text, default="")
+    amzius_en = db.Column(db.Text, default="")
+    padengiama_en = db.Column(db.Text, default="")
+    nuotoliu_en = db.Column(db.Text, default="")
+    registracija_en = db.Column(db.Text, default="")
+    studentu_nuolaida_en = db.Column(db.Text, default="")
+    note_en = db.Column(db.Text, default="")
 
     source = db.Column(db.String(400), default="")
     source_url = db.Column(db.String(1000), default="")
@@ -83,6 +100,7 @@ class Call(db.Model):
     changes = db.relationship("CallChange", backref="call", cascade="all, delete-orphan",
                               order_by="CallChange.at.desc()")
     subscriptions = db.relationship("Subscription", backref="call", cascade="all, delete-orphan")
+    reminders = db.relationship("ReminderSent", cascade="all, delete-orphan")
 
     # ---- helpers
     @property
@@ -108,6 +126,18 @@ class Call(db.Model):
 
     def deadline_word(self, lang):
         return (self.deadline_word_lt if lang == "lt" else self.deadline_word_en) or self.deadline_word_en or self.deadline_word_lt
+
+    def detail(self, name, lang):
+        """Returns (text, is_other_language) — falls back to the other language when a translation is missing."""
+        lt, en = getattr(self, name) or "", getattr(self, name + "_en") or ""
+        if lang == "en":
+            return (en, False) if en else (lt, bool(lt))
+        return (lt, False) if lt else (en, bool(en))
+
+    def missing_translations(self):
+        """Field pairs where exactly one language is filled in."""
+        pairs = [(f + "_lt", f + "_en") for f in PAIR_FIELDS] + [(f, f + "_en") for f in DETAIL_FIELDS]
+        return [(a, b) for a, b in pairs if bool(getattr(self, a)) != bool(getattr(self, b))]
 
     @property
     def region(self):
@@ -171,11 +201,17 @@ class Call(db.Model):
             "kamTinka": self.kam_tinka, "nauda": self.nauda, "mokestis": self.mokestis,
             "amzius": self.amzius, "padengiama": self.padengiama, "nuotoliu": self.nuotoliu,
             "registracija": self.registracija, "studentuNuolaida": self.studentu_nuolaida,
-            "note": self.note, "source": self.source, "sourceUrl": self.source_url,
+            "note": self.note, **{_camel(f) + "En": getattr(self, f + "_en") for f in DETAIL_FIELDS},
+            "source": self.source, "sourceUrl": self.source_url,
             "firstSeen": self.first_seen, "lastVerified": self.last_verified,
             "expires": self.expires.isoformat() if self.expires else "",
             "phase": self.phase(), "daysLeft": self.days_left(),
         }
+
+
+def _camel(name):
+    head, *rest = name.split("_")
+    return head + "".join(w.title() for w in rest)
 
 
 class CallChange(db.Model):
@@ -199,6 +235,7 @@ class User(UserMixin, db.Model):
     ms_tid = db.Column(db.String(64))
     is_admin = db.Column(db.Boolean, default=False)
     lang = db.Column(db.String(2), default="lt")
+    email_reminders = db.Column(db.Boolean, default=True, nullable=False, server_default=db.true())
     calendar_token = db.Column(db.String(64), unique=True, default=lambda: secrets.token_urlsafe(24))
     created_at = db.Column(db.DateTime, default=utcnow)
     last_login_at = db.Column(db.DateTime)
@@ -215,6 +252,17 @@ class Subscription(db.Model):
     call_id = db.Column(db.Integer, db.ForeignKey("call.id"), nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=utcnow)
     __table_args__ = (db.UniqueConstraint("user_id", "call_id"),)
+
+
+class ReminderSent(db.Model):
+    """One row per (user, call, kind) so a reminder is never sent twice."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    call_id = db.Column(db.Integer, db.ForeignKey("call.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind = db.Column(db.String(24), default="deadline_7d")
+    deadline = db.Column(db.Date)  # if the deadline moves, a new reminder is due
+    sent_at = db.Column(db.DateTime, default=utcnow)
+    __table_args__ = (db.UniqueConstraint("user_id", "call_id", "kind", "deadline"),)
 
 
 class RefreshRun(db.Model):

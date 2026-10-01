@@ -15,6 +15,7 @@ from flask import current_app
 
 from .extract import extract_with_claude, fetch, llm_available
 from .importer import parse_date
+from .messages import msg
 from .models import Call, CallChange, RefreshRun, db, today, utcnow
 
 log = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ def archive_expired():
         d = c.deadline or c.expires
         if d and d < cutoff:
             db.session.add(CallChange(call_id=c.id, origin="refresh", field="status", old=c.status,
-                                      new="archived", note=f"Terminas {d} praėjo"))
+                                      new="archived", note=msg("deadline_passed", date=str(d))))
             c.status = "archived"
             n += 1
     db.session.commit()
@@ -61,19 +62,19 @@ def check_call(call, use_llm=True):
     call.last_http_status = page.status or None
     changes = []
     if page.error or page.status >= 400:
-        flag(call, f"Nuoroda neveikia ({page.status or page.error})")
+        flag(call, msg("link_broken", status=str(page.status or page.error)))
         return ["broken link"]
     new_hash = page.content_hash
     changed_page = bool(call.content_hash) and new_hash != call.content_hash
     first_check = not call.content_hash
     call.content_hash = new_hash
-    if not (use_llm and llm_available()) or not (changed_page or first_check and call.status == "watch"):
+    if not (use_llm and llm_available()) or not (changed_page or (first_check and call.status == "watch")):
         return changes
 
     ex = extract_with_claude(page, previous=call.to_dict())
     if not ex:
         return changes
-    note = "Automatinė patikra organizatoriaus puslapyje"
+    note = msg("auto_check")
     for f, attr in AUTO_FIELDS.items():
         val = getattr(ex, f)
         new = parse_date(val) if attr in ("deadline", "event_start", "event_end") else val
@@ -83,13 +84,13 @@ def check_call(call, use_llm=True):
         if _set(call, attr, new, note):
             changes.append(f"{attr}: {new}")
     if call.status == "watch" and ex.status == "open":
-        _set(call, "status", "open", "Kvietimas atsidarė")
+        _set(call, "status", "open", msg("call_opened"))
         changes.append("watch → open")
     elif call.status == "open" and ex.status == "closed" and (call.deadline is None or call.deadline >= today()):
-        flag(call, "Puslapis rodo, kad kvietimas uždarytas, nors terminas dar nepraėjo")
+        flag(call, msg("page_closed"))
     if changes:
         call.last_verified = today().isoformat()
-        flag(call, "Automatiškai atnaujinta: " + "; ".join(changes))
+        flag(call, msg("auto_updated", changes="; ".join(changes)))
     return changes
 
 
@@ -100,6 +101,9 @@ def run_refresh(limit=None, use_llm=True):
     db.session.add(run)
     db.session.commit()
     lines = [f"archived: {archive_expired()}"]
+    if use_llm and llm_available():
+        from .translate import translate_missing
+        lines.append(f"translated fields: {translate_missing(limit=cfg['TRANSLATE_BATCH'])}")
     stale = utcnow() - timedelta(days=cfg["REFRESH_MIN_AGE_DAYS"])
     q = (Call.query.filter(Call.status.in_(["open", "watch"]), Call.url != "")
          .filter((Call.last_checked_at.is_(None)) | (Call.last_checked_at < stale))

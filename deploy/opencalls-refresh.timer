@@ -1,5 +1,3 @@
-# /etc/systemd/system/opencalls-refresh.timer
-# systemctl enable --now opencalls-refresh.timer
 [Unit]
 Description=Daily refresh of MISC open calls
 

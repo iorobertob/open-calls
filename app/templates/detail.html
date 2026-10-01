@@ -33,24 +33,29 @@
   <div class="topics">{% for t in c.topic_list %}<a class="topic fam-{{ TOPICS.get(t, ('ctx',))[0] }}" href="{{ url_for('main.index', topic=t) }}">{{ topic_label(t, lang) }}</a>{% endfor %}</div>
 
   <dl class="facts">
-    {% for label, val in [('Who it suits', c.kam_tinka), ('Benefit', c.nauda), ('Fee', c.mokestis), ('Age limits', c.amzius),
-                          ('Covered', c.padengiama), ('Remote', c.nuotoliu), ('Registration', c.registracija),
-                          ('Student discount', c.studentu_nuolaida), ('Note', c.note)] if val %}
-      <dt>{{ _(label) }}</dt><dd>{{ val }}</dd>
+    {% set ns = namespace(fallback=false) %}
+    {% for label, name in [('Who it suits', 'kam_tinka'), ('Benefit', 'nauda'), ('Fee', 'mokestis'), ('Age limits', 'amzius'),
+                           ('Covered', 'padengiama'), ('Remote', 'nuotoliu'), ('Registration', 'registracija'),
+                           ('Student discount', 'studentu_nuolaida'), ('Note', 'note')] %}
+      {% set val, other = c.detail(name, lang) %}
+      {% if val %}
+        {% if other %}{% set ns.fallback = true %}{% endif %}
+        <dt>{{ _(label) }}</dt><dd {% if other %}lang="{{ 'lt' if lang == 'en' else 'en' }}"{% endif %}>{{ val|sysmsg }}{% if other %} <span class="langtag" title="{{ _('Translation pending') }}">{{ 'LT' if lang == 'en' else 'EN' }}</span>{% endif %}</dd>
+      {% endif %}
     {% endfor %}
   </dl>
-  {% if lang == 'en' and (c.kam_tinka or c.nauda) %}<p class="hint">Detailed notes are written by the MISC coordinator in Lithuanian.</p>{% endif %}
+  {% if ns.fallback %}<p class="hint"><span class="langtag">{{ 'LT' if lang == 'en' else 'EN' }}</span> {{ _("Some details are not translated yet and are shown in the original language.") }}</p>{% endif %}
 
   <p class="prov">
     {% if not c.verified %}<b>⚠ {{ _("Not verified — open manually") }}</b> · {% endif %}
-    {% if c.source %}{{ _("Found via") }}: {% if c.source_url %}<a href="{{ c.source_url }}" rel="noopener">{{ c.source }}</a>{% else %}{{ c.source }}{% endif %} · {% endif %}
-    {% if c.first_seen %}{{ _("First seen") }}: {{ c.first_seen }} · {% endif %}
+    {% if c.source %}{{ _("Found via") }}: {% if c.source_url %}<a href="{{ c.source_url }}" rel="noopener">{{ c.source|sysmsg }}</a>{% else %}{{ c.source|sysmsg }}{% endif %} · {% endif %}
+    {% if c.first_seen %}{{ _("First seen") }}: {{ c.first_seen|firstseen }} · {% endif %}
     {% if c.last_verified %}{{ _("Last verified") }}: {{ c.last_verified }}{% endif %}
   </p>
 
   {% if user.is_authenticated and user.is_admin and c.changes %}
   <details class="history"><summary>{{ _("History") }} ({{ c.changes|length }})</summary>
-    <table>{% for ch in c.changes[:50] %}<tr><td>{{ ch.at.strftime('%Y-%m-%d') }}</td><td>{{ ch.origin }}</td><td>{{ ch.field }}</td><td>{{ ch.old|truncate(60) }}</td><td>→ {{ ch.new|truncate(60) }}</td><td>{{ ch.note }}</td></tr>{% endfor %}</table>
+    <table>{% for ch in c.changes[:50] %}<tr><td>{{ ch.at.strftime('%Y-%m-%d') }}</td><td>{{ ch.origin }}</td><td>{{ ch.field }}</td><td>{{ ch.old|truncate(60) }}</td><td>→ {{ ch.new|truncate(60) }}</td><td>{{ ch.note|sysmsg }}</td></tr>{% endfor %}</table>
   </details>
   {% endif %}
 </article>

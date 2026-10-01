@@ -1,11 +1,11 @@
-# /etc/systemd/system/opencalls-refresh.service — run by the timer below
+# Archive expired entries, fill missing translations, re-check organiser pages
 [Unit]
-Description=MISC open calls: archive expired entries and re-check organiser pages
+Description=MISC open calls: daily refresh
 
 [Service]
 Type=oneshot
-User=opencalls
-WorkingDirectory=/srv/opencalls
-EnvironmentFile=/srv/opencalls/.env
+User=__APP_USER__
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=__APP_DIR__/.env
 Environment=FLASK_APP=wsgi.py
-ExecStart=/srv/opencalls/.venv/bin/flask refresh
+ExecStart=__APP_DIR__/.venv/bin/flask refresh

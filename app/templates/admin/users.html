@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% block title %}{{ _("Users") }}{% endblock %}
 {% block content %}
-<h1>Users</h1>
-<table class="adm">{% for u in users %}<tr><td>{{ u.name }} &lt;{{ u.email }}&gt;<br><small>{{ u.subscriptions|length }} subscriptions · last login {{ u.last_login_at or '—' }}</small></td>
+<h1>{{ _("Users") }}</h1>
+<table class="adm">{% for u in users %}<tr><td>{{ u.name }} &lt;{{ u.email }}&gt;<br><small>{{ _("Subscriptions") }}: {{ u.subscriptions|length }} · {{ _("Email reminders") }}: {{ _("on") if u.email_reminders else _("off") }} · {{ _("Last login") }}: {{ u.last_login_at.strftime('%Y-%m-%d %H:%M') if u.last_login_at else '—' }}</small></td>
 <td><form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="user_id" value="{{ u.id }}">
-<button class="btn {{ 'on' if u.is_admin }}" {{ 'disabled' if u.id == user.id }}>{{ 'Admin ✓' if u.is_admin else 'Make admin' }}</button></form></td></tr>{% endfor %}</table>
+<button class="btn {{ 'on' if u.is_admin }}" {{ 'disabled' if u.id == user.id }}>{{ _("Admin") ~ ' ✓' if u.is_admin else _("Make admin") }}</button></form></td></tr>{% endfor %}</table>
 {% endblock %}

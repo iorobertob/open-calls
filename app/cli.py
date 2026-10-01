@@ -43,16 +43,64 @@ def register(app):
 
         from .extract import extract_url
         from .importer import apply_record
+        from .messages import msg
         from .views import to_record
         data, _, used = extract_url(url)
         c = Call(first_seen=date.today().isoformat(), source="CLI add-url", url=url, needs_review=True,
-                 review_reason="Pridėta per CLI")
+                 review_reason=msg("added_cli"))
         apply_record(c, to_record(data))
         if status != "open" or c.status not in ("open", "watch", "reject"):
             c.status = status
         db.session.add(c)
         db.session.commit()
         click.echo(f"#{c.id} [{c.status}] {c.title_en} — deadline {c.deadline} (Claude: {used})")
+
+    @app.cli.command("translate")
+    @click.option("--limit", type=int, default=None, help="Max entries to process")
+    @click.option("--dry-run", is_flag=True, help="Only count what is missing")
+    def translate_cmd(limit, dry_run):
+        """Fill missing Lithuanian/English versions of entry texts with Claude."""
+        from .extract import llm_available
+        from .translate import pending, translate_missing
+        todo = pending(limit)
+        fields = sum(len(c.missing_translations()) for c in todo)
+        click.echo(f"{len(todo)} entries, {fields} fields missing a translation")
+        if dry_run or not todo:
+            return
+        if not llm_available():
+            raise click.ClickException("Set ANTHROPIC_API_KEY first.")
+        n = translate_missing(limit, progress=lambda done, tot, n: click.echo(f"  {done}/{tot} entries, {n} fields"))
+        click.echo(f"Translated {n} fields.")
+
+    @app.cli.command("send-reminders")
+    @click.option("--dry-run", is_flag=True, help="Show what would be sent without sending")
+    def send_reminders_cmd(dry_run):
+        """Email users about subscribed calls whose deadline is REMINDER_DAYS_BEFORE days away (run daily)."""
+        from .reminders import send_reminders
+        sent, failed = send_reminders(dry_run=dry_run)
+        click.echo(f"{'would send' if dry_run else 'sent'}: {sent} users, failed: {failed}")
+        if failed:
+            raise SystemExit(1)
+
+    @app.cli.command("mailerlite-setup")
+    @click.option("--group-name", default="MISC open calls — deadline reminders")
+    def mailerlite_setup(group_name):
+        """Create the MailerLite custom fields (and the reminder group if MAILERLITE_REMINDER_GROUP_ID is empty)."""
+        from flask import current_app
+
+        from .mailer import MailerLite, create_group
+        key = current_app.config["MAILERLITE_API_KEY"]
+        if not key:
+            raise click.ClickException("Set MAILERLITE_API_KEY in .env first.")
+        gid = current_app.config["MAILERLITE_REMINDER_GROUP_ID"]
+        if not gid:
+            gid = create_group(key, group_name)
+            click.echo(f"Created group '{group_name}'. Put this in .env:  MAILERLITE_REMINDER_GROUP_ID={gid}")
+        created = MailerLite(key, gid).ensure_fields()
+        click.echo(f"Custom fields created: {', '.join(created) or 'none (already present)'}")
+        click.echo("Next: in MailerLite create an automation with trigger 'Joins a group' → this group, "
+                   "tick 'Allow subscribers to re-enter automation', and design the email with "
+                   "{$misc_reminder_subject}, {$misc_reminder_list} and {$misc_reminder_url}.")
 
     @app.cli.command("make-admin")
     @click.argument("email")

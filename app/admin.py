@@ -3,10 +3,15 @@ from functools import wraps
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
+from .auth import safe_next
 from .extract import extract_url, llm_available
+from .i18n import get_lang, tr
 from .importer import apply_record, import_payload, load_payload, parse_date
-from .models import STATUSES, Call, CallChange, RefreshRun, User, db, today
+from .models import DETAIL_FIELDS, STATUSES, Call, CallChange, RefreshRun, User, db, today
 from .refresh import check_call, run_refresh
+from .translate import pending as pending_translations
+from .messages import msg
+from .messages import render as render_msg
 from .views import to_record
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -14,7 +19,8 @@ bp = Blueprint("admin", __name__, url_prefix="/admin")
 TEXT_FIELDS = ["title_lt", "title_en", "org", "city_lt", "city_en", "country_lt", "country_en", "country_code",
                "deadline_word_lt", "deadline_word_en", "url", "desc_lt", "desc_en", "kam_tinka", "nauda",
                "mokestis", "amzius", "padengiama", "nuotoliu", "registracija", "studentu_nuolaida", "note",
-               "source", "source_url", "first_seen", "last_verified"]
+               "source", "source_url", "first_seen", "last_verified",
+               *[f + "_en" for f in DETAIL_FIELDS]]
 DATE_FIELDS = ["deadline", "expires", "event_start", "event_end"]
 
 
@@ -37,7 +43,7 @@ def dashboard():
     runs = RefreshRun.query.order_by(RefreshRun.started_at.desc()).limit(5).all()
     stats = {s: Call.query.filter_by(status=s).count() for s in STATUSES}
     return render_template("admin/dashboard.html", review=review, pending=pending, broken=broken, runs=runs,
-                           stats=stats, llm=llm_available())
+                           stats=stats, llm=llm_available(), untranslated=len(pending_translations()))
 
 
 def _form_to_call(call):
@@ -46,6 +52,8 @@ def _form_to_call(call):
         val = (request.form.get(f) or "").strip()
         if f == "country_code":
             val = val.upper()[:2]
+        if f == "source" and val == render_msg(call.source, get_lang()):
+            continue  # shown translated in the form; keep the stored language-neutral token
         if getattr(call, f) != val:
             changes.append((f, getattr(call, f), val))
             setattr(call, f, val)
@@ -75,17 +83,17 @@ def _form_to_call(call):
 @admin_required
 def new():
     call = Call(status="open", kind="conference", first_seen=today().isoformat(), last_verified=today().isoformat(),
-                verified=True, source="Įvesta rankiniu būdu")
+                verified=True, source=msg("manual_entry"))
     if request.method == "POST":
         _form_to_call(call)
         if not (call.title_en or call.title_lt):
-            flash("Title is required", "error")
+            flash(tr("A title is required."), "error")
             return render_template("admin/form.html", c=call)
         db.session.add(call)
         db.session.flush()
-        db.session.add(CallChange(call_id=call.id, origin="admin", user_id=current_user.id, note="Sukurta"))
+        db.session.add(CallChange(call_id=call.id, origin="admin", user_id=current_user.id, note=msg("created")))
         db.session.commit()
-        flash("Saved", "ok")
+        flash(tr("Saved."), "ok")
         return redirect(url_for("main.detail", call_id=call.id))
     return render_template("admin/form.html", c=call)
 
@@ -97,17 +105,18 @@ def import_url():
     url = (request.form.get("url") or "").strip()
     dup = Call.query.filter_by(url=url).first()
     if dup:
-        flash(f"Already in the database: #{dup.id} {dup.title_en or dup.title_lt}", "error")
+        flash(tr("Already in the database:") + f" #{dup.id} {dup.title(get_lang())}", "error")
     data, page, used_llm = extract_url(url)
     call = Call(status="open", first_seen=today().isoformat(), last_verified=today().isoformat(), verified=used_llm,
-                source="Nuoroda įvesta administratoriaus", url=url)
+                source=msg("admin_link"), url=url)
     apply_record(call, to_record(data))
+    call.review_reason = data.get("review", "")
     if used_llm and data.get("confidence") == "low":
-        flash("Low-confidence extraction — check every field.", "error")
+        flash(tr("Low-confidence extraction — check every field."), "error")
     if not used_llm:
-        flash("Claude API not configured or failed — basic extraction only.", "error")
+        flash(tr("Claude API not configured or failed — basic extraction only."), "error")
     if data.get("is_call") is False:
-        flash("The page does not look like an open call.", "error")
+        flash(tr("The page does not look like an open call."), "error")
     return render_template("admin/form.html", c=call, extracted=True)
 
 
@@ -122,7 +131,7 @@ def edit(call_id):
         if request.form.get("clear_review") == "on":
             call.needs_review, call.review_reason = False, ""
         db.session.commit()
-        flash("Saved", "ok")
+        flash(tr("Saved."), "ok")
         return redirect(url_for("main.detail", call_id=call.id))
     return render_template("admin/form.html", c=call)
 
@@ -146,13 +155,13 @@ def action(call_id):
     elif act == "delete":
         db.session.delete(call)
         db.session.commit()
-        flash("Deleted", "ok")
+        flash(tr("Deleted."), "ok")
         return redirect(url_for(".dashboard"))
     elif act == "recheck":
         ch = check_call(call)
-        flash("Re-checked: " + (", ".join(ch) if ch else "no changes"), "ok")
+        flash(tr("Re-checked:") + " " + (", ".join(ch) if ch else tr("no changes")), "ok")
     db.session.commit()
-    return redirect(request.form.get("next") or url_for(".dashboard"))
+    return redirect(safe_next(request.form.get("next"), url_for(".dashboard")))
 
 
 @bp.route("/import-data", methods=["POST"])
@@ -165,7 +174,7 @@ def import_data():
     try:
         payload = load_payload(f.read().decode("utf-8"))
         created, updated, skipped = import_payload(payload, drop_expired=True)
-        flash(f"Imported: {created} new, {updated} updated, {skipped} expired skipped", "ok")
+        flash(tr("Imported: {0} new, {1} updated, {2} expired skipped").format(created, updated, skipped), "ok")
     except ValueError as e:
         flash(str(e), "error")
     return redirect(url_for(".dashboard"))
@@ -175,7 +184,7 @@ def import_data():
 @admin_required
 def refresh():
     run = run_refresh(limit=int(request.form.get("limit", 10)))
-    flash(f"Checked {run.checked}, changed {run.changed}, errors {run.errors}", "ok")
+    flash(tr("Checked {0}, changed {1}, errors {2}").format(run.checked, run.changed, run.errors), "ok")
     return redirect(url_for(".dashboard"))
 
 

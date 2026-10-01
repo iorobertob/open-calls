@@ -24,7 +24,7 @@ The database is seeded with the list the MISC coordinator curated on 2026‑09�
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env          # set DEV_LOGIN=1 and ADMIN_EMAILS=you@lmta.lt for local testing
+cp .env.example .env          # the single settings file (local + deploy)
 export FLASK_APP=wsgi.py
 .venv/bin/flask db upgrade    # create tables
 .venv/bin/flask init-db       # seed the curated list (only if the DB is empty)
@@ -42,6 +42,9 @@ flask init-db                         # create tables + seed from seed/*.json if
 flask import MISC-sarasas-2026-10-05.html --drop-expired   # merge a weekly list (HTML or JSON)
 flask add-url https://… [--status open]                    # extract one link (pending review by default)
 flask refresh [--limit 40] [--no-llm]                      # archive expired + re-check pages
+flask translate [--dry-run]                                # fill missing LT/EN texts with Claude
+flask send-reminders [--dry-run]                           # deadline reminder emails (daily)
+flask mailerlite-setup                                     # create MailerLite group + fields (once)
 flask make-admin someone@lmta.lt
 flask db migrate -m "…" && flask db upgrade                # after model changes
 ```
@@ -59,21 +62,52 @@ Logins from other tenants are rejected. Only the delegated `User.Read` permissio
 
 Set `ANTHROPIC_API_KEY` to turn on AI extraction and AI re‑checks. The model defaults to `claude-opus-5-5` with `CLAUDE_EFFORT=medium`. Requests use structured output (a Pydantic schema), so the fields always parse. They also enable the API's server‑side refusal fallback (`fallbacks: "default"`). Cost is controlled by `REFRESH_BATCH` (pages per run) and `REFRESH_MIN_AGE_DAYS`. Claude is only called when a page's text has actually changed.
 
-## Production deployment (Linux VM)
+## Translations (LT / EN)
+
+Every interface string goes through `app/i18n.py`, and messages the app generates itself are stored as neutral tokens (`app/messages.py`) that display in the viewer's language. Entry content is stored in both languages. The curator writes the detail fields (who it suits, benefit, fee…) in Lithuanian only. Until they are translated, the English view shows them in Lithuanian with an **LT** tag. To fill them in:
 
 ```bash
-sudo useradd -r -m -d /srv/opencalls opencalls
-# copy the project to /srv/opencalls, then:
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env   # SECRET_KEY, DATABASE_URL (PostgreSQL), MS_*, ANTHROPIC_API_KEY,
-                       # SESSION_COOKIE_SECURE=1, PREFERRED_URL_SCHEME=https, DEV_LOGIN=0
-FLASK_APP=wsgi.py .venv/bin/flask db upgrade && FLASK_APP=wsgi.py .venv/bin/flask init-db
-sudo cp deploy/opencalls*.service deploy/opencalls-refresh.timer /etc/systemd/system/
-sudo systemctl enable --now opencalls opencalls-refresh.timer
-sudo cp deploy/nginx.conf /etc/nginx/sites-available/opencalls   # then certbot --nginx
+flask translate --dry-run     # how many fields are missing a translation
+flask translate               # translate them with Claude (needs ANTHROPIC_API_KEY)
 ```
 
-SQLite is fine for a single server with little traffic. PostgreSQL is recommended for production (`psycopg` is in the requirements). Back up the database daily.
+After that, the daily refresh translates new entries automatically (`TRANSLATE_BATCH` per run).
+
+## Email reminders (MailerLite)
+
+Logged‑in users who subscribe to an entry get one email **7 days before its deadline** (`REMINDER_DAYS_BEFORE`). All due entries for a user are bundled into one message, and users can switch reminders off on *My subscriptions*. MailerLite has no one‑to‑one sending API, so the app uses MailerLite's automation pattern:
+
+1. Create an API token in MailerLite (Integrations → API) and put it in `.env` as `MAILERLITE_API_KEY`.
+2. `flask mailerlite-setup` creates the reminder group and the custom fields (`misc_reminder_subject`, `misc_reminder_list`, `misc_reminder_count`, `misc_reminder_url`, `misc_language`). It prints `MAILERLITE_REMINDER_GROUP_ID` to add to `.env`.
+3. In MailerLite, create an **automation**. Trigger: *Joins a group* → that group. Settings: tick **Allow subscribers to re‑enter automation**. Email subject `{$misc_reminder_subject}`, body `{$misc_reminder_list}` plus a button to `{$misc_reminder_url}`. For two languages, use a condition on `misc_language`.
+4. `flask send-reminders` (daily 09:00 via the systemd timer) updates each user's fields, then removes and re‑adds them to the group, which fires the automation. `--dry-run` shows what would be sent. Each reminder is recorded, so it is never sent twice; if a deadline moves, a new reminder follows.
+
+Until both `MAILERLITE_API_KEY` and `MAILERLITE_REMINDER_GROUP_ID` are set, reminders are only written to the log. Once they are set, running `flask send-reminders` locally sends real emails to the users in your local database.
+
+## Production deployment — https://misc.lmta.lt/open-calls
+
+The app runs next to the WordPress site on the same nginx server. Gunicorn listens on `127.0.0.1:8010`. An nginx snippet included in the WordPress `server {}` block forwards `/open-calls/` to it and sends `X-Forwarded-Prefix`, so every link, redirect and cookie stays under `/open-calls`. The `^~` locations take priority over WordPress's regex rules, so the rest of the WordPress site is not affected.
+
+```bash
+./deploy/deploy.sh                 # first deploy and every update
+```
+
+There is a single settings file, `.env`, used both locally and on the server. `deploy.sh` runs the tests, uploads the code (excluding local databases and venvs) and your `.env`, then runs `deploy/remote-install.sh` on the server with sudo. Values that must differ in production are set on the server automatically: `DEV_LOGIN=0`, `APP_PREFIX=/open-calls`, `PUBLIC_BASE_URL`, secure HTTPS cookies, and a server‑only `SECRET_KEY` that is generated once and kept across deploys. To change a credential, edit `.env` and deploy again.
+
+SSH goes to `misc.lmta.lt` using your SSH config. If your server login differs from your local username, add `User` under `Host misc.lmta.lt` in `~/.ssh/config`, or set `DEPLOY_SSH=user@misc.lmta.lt` in `.env`.
+
+`remote-install.sh` also:
+
+- creates the `opencalls` system user and copies the code to `/srv/opencalls`
+- installs the merged `.env` with mode 600
+- creates the virtualenv, runs migrations and seeds the list the first time
+- installs `opencalls.service` (gunicorn) plus the daily **refresh** (04:15) and **reminders** (09:00) timers
+- writes `/etc/nginx/snippets/misc-open-calls.conf` and adds `include` after the `server_name misc.lmta.lt` line(s), keeping a timestamped backup; if `nginx -t` fails, the original is restored
+- reloads nginx and checks that `https://misc.lmta.lt/open-calls/` returns 200
+
+Server requirements: a user with SSH and sudo, Python 3.10 or newer with `venv`, `rsync` and `curl`. If the site's nginx file cannot be found automatically, pass `NGINX_SITE=/etc/nginx/sites-available/<file>`. In the Entra app registration, add the redirect URI `https://misc.lmta.lt/open-calls/auth/callback`.
+
+Logs: `journalctl -u opencalls -f`, `journalctl -u opencalls-refresh`, `journalctl -u opencalls-reminders`.
 
 ## Weekly workflow (compatibility)
 
@@ -94,6 +128,6 @@ app/
   views.py, admin.py, cli.py, scheduler.py
   screen_template.html   the MISC TV-screen template, filled by /screen
 seed/            initial curated data
-deploy/          systemd, timer, nginx
+deploy/          deploy.sh, remote-install.sh, systemd units/timers, nginx snippet
 migrations/      Alembic migrations
 ```

@@ -14,6 +14,14 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn ghost">{{ _("Reset feed address") }}</button></form>
   </div>
 </section>
+<section class="panel">
+  <h2>{{ _("Email reminders") }}</h2>
+  <form method="post" action="{{ url_for('main.reminder_settings') }}" class="acts">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="inline"><input type="checkbox" name="email_reminders" {{ 'checked' if user.email_reminders }}> {{ _("Email me 7 days before the deadline of each call I subscribe to") }}</label>
+    <button class="btn">{{ _("Save") }}</button>
+  </form>
+</section>
 <div class="cards">
   {% for c in calls %}{{ m.card(c, request.path) }}{% else %}<p class="empty">{{ _("You have no subscriptions yet.") }} <a href="{{ url_for('main.index') }}">{{ _("Open calls") }} →</a></p>{% endfor %}
 </div>

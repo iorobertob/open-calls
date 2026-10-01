@@ -1,54 +1,60 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Edit' if c.id else 'New call' }}{% endblock %}
+{% block title %}{{ _("Edit") if c.id else _("New call") }}{% endblock %}
 {% macro field(name, label, type='text', wide=False, rows=0) %}
-  <label class="{{ 'wide' if wide }}">{{ label }}
+  <label class="{{ 'wide' if wide }}">{{ _(label) }}
   {% if rows %}<textarea name="{{ name }}" rows="{{ rows }}">{{ c[name] or '' }}</textarea>
   {% else %}<input type="{{ type }}" name="{{ name }}" value="{{ c[name] or '' }}">{% endif %}</label>
 {% endmacro %}
+{% macro pair(name, label, rows=2) %}
+  {{ field(name, label ~ ' (LT)', wide=True, rows=rows) }}{{ field(name ~ '_en', label ~ ' (EN)', wide=True, rows=rows) }}
+{% endmacro %}
+{% set STATUS_LABELS = {'open': 'Open', 'watch': 'Opens soon', 'reject': 'Not eligible', 'pending': 'Pending review', 'archived': 'Archived'} %}
 {% block content %}
-<h1>{{ ('Edit #' ~ c.id) if c.id else 'New call' }}</h1>
-{% if extracted %}<div class="flash ok">Fields were read automatically from the page — please check them before saving.</div>{% endif %}
-{% if c.review_reason %}<pre class="reason">{{ c.review_reason }}</pre>{% endif %}
+<h1>{{ (_("Edit") ~ ' #' ~ c.id) if c.id else _("New call") }}</h1>
+{% if extracted %}<div class="flash ok">{{ _("Fields were read automatically from the page — please check them before saving.") }}</div>{% endif %}
+{% if c.review_reason %}<pre class="reason">{{ c.review_reason|sysmsg }}</pre>{% endif %}
 <form method="post" action="{{ url_for('admin.edit', call_id=c.id) if c.id else url_for('admin.new') }}" class="editform">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <fieldset><legend>Basics</legend>
-    <label>Status<select name="status">{% for s in ['open', 'watch', 'reject', 'pending', 'archived'] %}<option {{ 'selected' if c.status == s }}>{{ s }}</option>{% endfor %}</select></label>
-    <label>Type<select name="kind">{% for k in KIND_ORDER %}<option value="{{ k }}" {{ 'selected' if c.kind == k }}>{{ KINDS[k].en }}</option>{% endfor %}</select></label>
-    <label class="inline"><input type="checkbox" name="star" {{ 'checked' if c.star }}> ★ Best fit</label>
-    <label class="inline"><input type="checkbox" name="verified" {{ 'checked' if c.verified }}> Verified on organiser page</label>
-    {{ field('url', 'Official URL', 'url', True) }}
-    {{ field('title_en', 'Title (EN)', wide=True) }} {{ field('title_lt', 'Title (LT)', wide=True) }}
+  <fieldset><legend>{{ _("Basics") }}</legend>
+    <label>{{ _("Status") }}<select name="status">{% for s in ['open', 'watch', 'reject', 'pending', 'archived'] %}<option value="{{ s }}" {{ 'selected' if c.status == s }}>{{ _(STATUS_LABELS[s]) }}</option>{% endfor %}</select></label>
+    <label>{{ _("Type") }}<select name="kind">{% for k in KIND_ORDER %}<option value="{{ k }}" {{ 'selected' if c.kind == k }}>{{ KINDS[k][lang] }}</option>{% endfor %}</select></label>
+    <label class="inline"><input type="checkbox" name="star" {{ 'checked' if c.star }}> ★ {{ _("Best fit") }}</label>
+    <label class="inline"><input type="checkbox" name="verified" {{ 'checked' if c.verified }}> {{ _("Verified on the organiser's page") }}</label>
+    {{ field('url', 'Official page', 'url', True) }}
+    {{ field('title_lt', 'Title (LT)', wide=True) }} {{ field('title_en', 'Title (EN)', wide=True) }}
     {{ field('org', 'Organiser', wide=True) }}
   </fieldset>
-  <fieldset><legend>Dates</legend>
+  <fieldset><legend>{{ _("Dates") }}</legend>
     {{ field('deadline', 'Deadline', 'date') }} {{ field('expires', 'Valid until (if no deadline)', 'date') }}
     {{ field('event_start', 'Event start', 'date') }} {{ field('event_end', 'Event end', 'date') }}
-    {{ field('deadline_word_en', 'Deadline wording (EN, if no date)') }} {{ field('deadline_word_lt', 'Deadline wording (LT)') }}
+    {{ field('deadline_word_lt', 'Deadline wording if no date (LT)') }} {{ field('deadline_word_en', 'Deadline wording if no date (EN)') }}
   </fieldset>
-  <fieldset><legend>Place</legend>
-    {{ field('city_en', 'City (EN)') }} {{ field('city_lt', 'City (LT)') }}
-    {{ field('country_en', 'Country (EN)') }} {{ field('country_lt', 'Country (LT)') }}
+  <fieldset><legend>{{ _("Location") }}</legend>
+    {{ field('city_lt', 'City (LT)') }} {{ field('city_en', 'City (EN)') }}
+    {{ field('country_lt', 'Country (LT)') }} {{ field('country_en', 'Country (EN)') }}
     {{ field('country_code', 'Country code (ISO-2, XX = online)') }}
   </fieldset>
-  <fieldset><legend>Description</legend>
-    {{ field('desc_en', 'Short description (EN, ≤165)', wide=True, rows=2) }} {{ field('desc_lt', 'Short description (LT, ≤165)', wide=True, rows=2) }}
-    <div class="wide topicpick">{% for fam, fv in FAMILIES.items() %}<div class="fam"><span>{{ fv.en }}</span>
-      {% for t, tv in TOPICS.items() if tv[0] == fam %}<label class="topic fam-{{ fam }}"><input type="checkbox" name="topics" value="{{ t }}" {{ 'checked' if t in c.topic_list }}>{{ tv[2] }}</label>{% endfor %}</div>{% endfor %}</div>
+  <fieldset><legend>{{ _("Description") }}</legend>
+    {{ field('desc_lt', 'Short description (LT, ≤165)', wide=True, rows=2) }} {{ field('desc_en', 'Short description (EN, ≤165)', wide=True, rows=2) }}
+    <div class="wide topicpick">{% for fam, fv in FAMILIES.items() %}<div class="fam"><span>{{ fv[lang] }}</span>
+      {% for t, tv in TOPICS.items() if tv[0] == fam %}<label class="topic fam-{{ fam }}"><input type="checkbox" name="topics" value="{{ t }}" {{ 'checked' if t in c.topic_list }}>{{ topic_label(t, lang) }}</label>{% endfor %}</div>{% endfor %}</div>
   </fieldset>
-  <fieldset><legend>Details (LT)</legend>
-    {{ field('kam_tinka', 'Kam tinka', wide=True, rows=2) }} {{ field('nauda', 'Nauda', wide=True, rows=2) }}
-    {{ field('mokestis', 'Mokestis') }} {{ field('amzius', 'Amžius') }} {{ field('padengiama', 'Padengiama', wide=True) }}
-    {{ field('nuotoliu', 'Nuotoliu (konferencijoms)') }} {{ field('registracija', 'Registracija') }} {{ field('studentu_nuolaida', 'Studentų nuolaida') }}
-    {{ field('note', 'Pastaba', wide=True, rows=3) }}
+  <fieldset><legend>{{ _("Details") }}</legend>
+    <p class="hint wide">{{ _("Fill in either language — missing translations are added automatically when the Claude API is configured.") }}</p>
+    {{ pair('kam_tinka', 'Who it suits') }} {{ pair('nauda', 'Benefit') }}
+    {{ pair('mokestis', 'Fee', 1) }} {{ pair('amzius', 'Age limits', 1) }} {{ pair('padengiama', 'Covered', 1) }}
+    {{ pair('nuotoliu', 'Remote', 1) }} {{ pair('registracija', 'Registration', 1) }} {{ pair('studentu_nuolaida', 'Student discount', 1) }}
+    {{ pair('note', 'Note', 3) }}
   </fieldset>
-  <fieldset><legend>Provenance</legend>
-    {{ field('source', 'Found via') }} {{ field('source_url', 'Source URL', 'url') }}
+  <fieldset><legend>{{ _("Provenance") }}</legend>
+    <label>{{ _("Found via") }}<input type="text" name="source" value="{{ c.source|sysmsg }}"></label>
+    {{ field('source_url', 'Source URL', 'url') }}
     {{ field('first_seen', 'First seen') }} {{ field('last_verified', 'Last verified') }}
   </fieldset>
   <div class="acts">
-    {% if c.id and c.needs_review %}<label class="inline"><input type="checkbox" name="clear_review" checked> Mark as reviewed</label>{% endif %}
-    <button class="btn primary">Save</button>
-    <a class="btn ghost" href="{{ url_for('admin.dashboard') }}">Cancel</a>
+    {% if c.id and c.needs_review %}<label class="inline"><input type="checkbox" name="clear_review" checked> {{ _("Mark reviewed") }}</label>{% endif %}
+    <button class="btn primary">{{ _("Save") }}</button>
+    <a class="btn ghost" href="{{ url_for('admin.dashboard') }}">{{ _("Cancel") }}</a>
   </div>
 </form>
 {% endblock %}

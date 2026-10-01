@@ -32,7 +32,7 @@
   <div class="cmain">
     <div class="meta-top">
       <span class="kind">{{ KINDS.get(c.kind, KINDS['other'])['short_' ~ lang] }}</span>
-      {% if c.star %}<span class="star" title="Best fit">★</span>{% endif %}
+      {% if c.star %}<span class="star" title="{{ _('Best fit') }}">★</span>{% endif %}
       {% if not c.verified %}<span class="unver" title="{{ _('Not verified — open manually') }}">?</span>{% endif %}
     </div>
     <h3><a href="{{ url_for('main.detail', call_id=c.id) }}">{{ c.title(lang) }}</a></h3>

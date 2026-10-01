@@ -8,10 +8,12 @@ from flask import (Blueprint, Response, abort, current_app, flash, jsonify, redi
 from flask_login import current_user, login_required
 from werkzeug.datastructures import MultiDict
 
+from .auth import safe_next
 from .extract import extract_url
 from .i18n import get_lang, tr
 from .ics import ics_response
 from .importer import apply_record
+from .messages import msg
 from .models import Call, CallChange, Subscription, User, db, today
 from .search import Filters, run_search, sort_calls
 from .taxonomy import COUNTRIES, KINDS, TOPICS
@@ -84,7 +86,7 @@ def subscribe(call_id):
     if not current_user.is_subscribed(c):
         db.session.add(Subscription(user_id=current_user.id, call_id=c.id))
         db.session.commit()
-    return redirect(request.form.get("next") or url_for(".detail", call_id=c.id))
+    return redirect(safe_next(request.form.get("next"), url_for(".detail", call_id=c.id)))
 
 
 @bp.route("/call/<int:call_id>/unsubscribe", methods=["POST"])
@@ -92,7 +94,7 @@ def subscribe(call_id):
 def unsubscribe(call_id):
     Subscription.query.filter_by(user_id=current_user.id, call_id=call_id).delete()
     db.session.commit()
-    return redirect(request.form.get("next") or url_for(".detail", call_id=call_id))
+    return redirect(safe_next(request.form.get("next"), url_for(".detail", call_id=call_id)))
 
 
 @bp.route("/my")
@@ -101,6 +103,15 @@ def my():
     calls = sort_calls([s.call for s in current_user.subscriptions], "deadline", get_lang())
     feed = url_for(".user_feed", token=current_user.calendar_token, _external=True)
     return render_template("my.html", calls=calls, feed=feed, webcal=re.sub(r"^https?://", "webcal://", feed))
+
+
+@bp.route("/my/reminders", methods=["POST"])
+@login_required
+def reminder_settings():
+    current_user.email_reminders = request.form.get("email_reminders") == "on"
+    db.session.commit()
+    flash(tr("Reminder settings saved."), "ok")
+    return redirect(url_for(".my"))
 
 
 @bp.route("/my/reset-feed", methods=["POST"])
@@ -118,18 +129,20 @@ def suggest():
     if request.method == "POST":
         url = (request.form.get("url") or "").strip()
         if not re.match(r"^https?://", url):
-            flash("URL must start with http:// or https://", "error")
+            flash(tr("The link must start with http:// or https://"), "error")
             return redirect(url_for(".suggest"))
         data, _page, _ = extract_url(url)
         c = Call(submitted_by_id=current_user.id, first_seen=today().isoformat(),
-                 source=f"Pasiūlė {current_user.email}", url=url)
+                 source=msg("suggested_by", email=current_user.email), url=url)
         apply_record(c, to_record(data))
         c.status = "pending"
         db.session.add(c)
         db.session.flush()
         comment = (request.form.get("comment") or "").strip()
         c.needs_review = True
-        c.review_reason = f"Naudotojo pasiūlymas ({current_user.email})" + (f": {comment}" if comment else "")
+        c.review_reason = "\n".join(x for x in [msg("user_suggestion", email=current_user.email),
+                                                  msg("comment", text=comment) if comment else "",
+                                                  data.get("review", "")] if x)
         db.session.add(CallChange(call_id=c.id, origin="suggestion", user_id=current_user.id, note=comment))
         db.session.commit()
         flash(tr("Thank you — the suggestion was sent for review."), "ok")
@@ -200,7 +213,7 @@ def api_export():
     calls = Call.query.filter(Call.status.in_(["open", "watch", "reject"])).all()
     calls = [c for c in calls if c.phase() != "closed"]
     body = {"schema": 1, "generated": date.today().isoformat(),
-            "rules": "status: open|watch|reject. Eksportuota iš MISC atvirų kvietimų programos.",
+            "rules": "status: open|watch|reject. Exported from the MISC open calls app.",
             "calls": [c.to_dict() for c in sort_calls(calls, "deadline")]}
     return Response(json.dumps(body, ensure_ascii=False, indent=1), mimetype="application/json")
 

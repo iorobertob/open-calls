@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup
 from flask import current_app
 from pydantic import BaseModel, Field
 
+from .messages import msg
 from .taxonomy import KINDS, TOPICS
 
 log = logging.getLogger(__name__)
@@ -106,6 +107,15 @@ class Extraction(BaseModel):
     registracija: str = Field(description="LT, conferences only: registration fee, else empty")
     studentu_nuolaida: str = Field(description="LT, conferences only: student discount, else empty")
     note: str = Field(description="LT: caveats, visa/travel/funding reality for academies & residencies, reasons for reject")
+    kam_tinka_en: str = Field(description="English version of kam_tinka")
+    nauda_en: str = Field(description="English version of nauda")
+    mokestis_en: str = Field(description="English version of mokestis ('Free' / 'Not stated')")
+    amzius_en: str = Field(description="English version of amzius ('No limits' / 'Not stated')")
+    padengiama_en: str = Field(description="English version of padengiama")
+    nuotoliu_en: str = Field(description="English version of nuotoliu (conferences only, else empty)")
+    registracija_en: str = Field(description="English version of registracija (conferences only, else empty)")
+    studentu_nuolaida_en: str = Field(description="English version of studentu_nuolaida (conferences only, else empty)")
+    note_en: str = Field(description="English version of note")
     star: bool = Field(description="True only for an exceptionally good fit for MISC students/researchers")
     confidence: Literal["high", "medium", "low"]
 
@@ -133,8 +143,8 @@ country or city; schemes excluding BA/MA students where that matters; mobility s
 study-related travel; members-only calls; paid online "certificate" competitions.
 
 RULES: only report what the page actually says; never invent dates. If the page is an aggregator,
-say so in `note`. Dates are ISO YYYY-MM-DD. Fields marked LT are written in Lithuanian; everything
-else bilingual as named. Keep desc_* under 165 characters and title_lt under 78 characters."""
+say so in `note`. Dates are ISO YYYY-MM-DD. Fields marked LT are written in Lithuanian and each has an
+*_en English counterpart with the same content; other fields are bilingual as named. Keep desc_* under 165 characters and title_lt under 78 characters."""
 
 
 def _client():
@@ -143,12 +153,22 @@ def _client():
     return anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
 
 
+def parse_with_fallback(**kwargs):
+    """Structured-output request with the API's server-side refusal fallback enabled."""
+    import anthropic
+    client = _client()
+    try:
+        return client.beta.messages.parse(betas=["server-side-fallback-2026-07-01"], fallbacks="default", **kwargs)
+    except anthropic.BadRequestError as e:
+        log.warning("Fallback request rejected (%s); retrying without fallbacks", e.message)
+        return client.beta.messages.parse(**kwargs)
+
+
 def llm_available():
     return bool(current_app.config.get("ANTHROPIC_API_KEY"))
 
 
 def extract_with_claude(page: Page, previous: dict | None = None) -> Extraction | None:
-    import anthropic
     today = date.today().isoformat()
     parts = [f"Today is {today}.", f"URL: {page.final_url or page.url}", f"Page title: {page.title}"]
     if page.description:
@@ -168,13 +188,7 @@ def extract_with_claude(page: Page, previous: dict | None = None) -> Extraction 
         output_format=Extraction,
         output_config={"effort": current_app.config["CLAUDE_EFFORT"]},
     )
-    client = _client()
-    try:
-        # Server-side fallback: if the primary model declines, the API retries on a suitable model.
-        resp = client.beta.messages.parse(betas=["server-side-fallback-2026-07-01"], fallbacks="default", **kwargs)
-    except anthropic.BadRequestError as e:
-        log.warning("Fallback request rejected (%s); retrying without fallbacks", e.message)
-        resp = client.beta.messages.parse(**kwargs)
+    resp = parse_with_fallback(**kwargs)
     if resp.stop_reason == "refusal":
         log.warning("Extraction refused for %s", page.url)
         return None
@@ -223,7 +237,7 @@ def heuristic(page: Page) -> dict:
     return {
         "title_en": page.title[:400], "desc_en": page.description[:500], "url": page.final_url or page.url,
         "deadline": deadline.isoformat() if deadline else "", "status": "open" if deadline else "watch",
-        "note": "Automatiškai nuskaityta be AI — patikrinkite visus laukus.",
+        "review": msg("heuristic"),
     }
 
 
@@ -231,7 +245,7 @@ def extract_url(url):
     """Returns (fields: dict, page: Page, used_llm: bool)."""
     page = fetch(url)
     if page.error and not page.text:
-        return {"url": url, "note": f"Nepavyko atidaryti puslapio: {page.error}"}, page, False
+        return {"url": url, "review": msg("page_unreachable", error=page.error)}, page, False
     if llm_available():
         try:
             ex = extract_with_claude(page)

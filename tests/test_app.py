@@ -86,3 +86,56 @@ def test_import_roundtrip(app):
     payload = c.get("/api/export.json").get_json()
     created, updated, _ = import_payload(payload)
     assert created == 0  # idempotent: same url + title are merged
+
+
+def test_prefix_mount(app):
+    """Behind nginx at /open-calls: links, redirects and login `next` keep the prefix."""
+    c = app.test_client()
+    h = {"X-Forwarded-Prefix": "/open-calls", "X-Forwarded-Proto": "https", "X-Forwarded-Host": "misc.lmta.lt"}
+    body = c.get("/", headers=h).get_data(as_text=True)
+    assert 'href="/open-calls/static/style.css"' in body and 'href="/open-calls/call/1"' in body
+    r = c.get("/my", headers=h)
+    assert r.headers["Location"].startswith("/open-calls/auth/login?next=")
+    c.post("/auth/dev-login", data={"email": "student@lmta.lt"}, headers=h)
+    r = c.post("/call/1/subscribe", data={"next": "/my"}, headers=h)
+    assert r.headers["Location"] == "/open-calls/my"
+    r = c.post("/call/1/unsubscribe", data={"next": "https://evil.example/"}, headers=h)
+    assert r.headers["Location"] == "/open-calls/call/1"
+    feed = c.get("/feed.ics", headers=h).get_data(as_text=True).replace("\r\n ", "")  # unfold iCal lines
+    assert "https://misc.lmta.lt/open-calls/call/" in feed
+
+
+def test_english_mode_has_no_lithuanian_ui(app):
+    import re
+    from app.models import Call
+    c = app.test_client()
+    login(c)
+    c.get("/lang/en")
+    call = Call.query.first()
+    call.kam_tinka, call.kam_tinka_en = "Studentams", ""
+    db.session.commit()
+    lt_chars = re.compile(r"[ąčęėįšųūž]")
+    for url in ["/", "/call/1", "/map", "/about", "/my", "/suggest", "/admin/", "/admin/call/1/edit", "/admin/users", "/nope"]:
+        html = c.get(url).get_data(as_text=True)
+        html = re.sub(r"<(script|textarea|input|option)[^>]*>.*?</\1>|<input[^>]*>", "", html, flags=re.S)
+        text = re.sub(r"<[^>]+>", " ", html)
+        found = [w for w in text.split() if lt_chars.search(w)]
+        # the only Lithuanian allowed is untranslated *content*, which is tagged LT
+        assert found in ([], ["Studentams"]), (url, found[:10])
+
+
+def test_reminders(app):
+    from app.models import ReminderSent, Subscription
+    from app.reminders import send_reminders
+    student = User(email="s@lmta.lt", name="S", lang="en")
+    db.session.add(student)
+    db.session.flush()
+    db.session.add(Subscription(user_id=student.id, call_id=1))   # deadline in 3 days → due
+    db.session.add(Subscription(user_id=student.id, call_id=2))   # deadline in 60 days → not yet
+    db.session.commit()
+    assert send_reminders() == (1, 0)          # console backend
+    assert ReminderSent.query.count() == 1
+    assert send_reminders() == (0, 0)          # never twice
+    db.session.get(Call, 1).deadline += timedelta(days=1)  # deadline moved → new reminder
+    db.session.commit()
+    assert send_reminders() == (1, 0)

@@ -37,11 +37,16 @@ def _msal_app():
         authority=f"https://login.microsoftonline.com/{cfg['MS_TENANT_ID']}")
 
 
-def _safe_next(target):
-    if not target:
-        return url_for("main.index")
+def safe_next(target, fallback=None):
+    """Only allow local paths; app-relative paths get the mount prefix (e.g. /open-calls) added."""
+    fallback = fallback or url_for("main.index")
+    if not target or not target.startswith("/") or target.startswith("//"):
+        return fallback
     p = urlparse(target)
-    return target if not p.netloc and not p.scheme and target.startswith("/") else url_for("main.index")
+    if p.netloc or p.scheme:
+        return fallback
+    root = request.script_root
+    return target if not root or target == root or target.startswith(root + "/") else root + target
 
 
 def _finish_login(email, name, oid=None, tid=None):
@@ -63,12 +68,12 @@ def _finish_login(email, name, oid=None, tid=None):
         user.lang = session["lang"]
     db.session.commit()
     login_user(user, remember=True)
-    return redirect(_safe_next(session.pop("login_next", None)))
+    return redirect(session.pop("login_next", None) or url_for("main.index"))
 
 
 @bp.route("/login")
 def login():
-    session["login_next"] = _safe_next(request.args.get("next"))
+    session["login_next"] = safe_next(request.args.get("next"))
     if not current_app.config["MS_CLIENT_ID"]:
         if current_app.config["DEV_LOGIN"]:
             return redirect(url_for(".dev_login"))

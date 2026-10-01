@@ -11,6 +11,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
 
 from .i18n import get_lang, tr
+from .messages import render as render_msg
 from .models import URGENT_DAYS, db
 from .taxonomy import COUNTRIES, FAMILIES, KIND_ORDER, KINDS, REGIONS, TOPICS, country_name, topic_label
 
@@ -22,7 +23,7 @@ def create_app(config=Config):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config)
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     logging.basicConfig(level=logging.INFO)
     if app.config["DEV_LOGIN"] and not (app.debug or app.testing):
         app.logger.warning("DEV_LOGIN ignored: only allowed with --debug or in tests")
@@ -57,6 +58,15 @@ def create_app(config=Config):
         if lang == "lt":
             return d.isoformat()
         return f"{d.day} {d.strftime('%b %Y')}"
+
+    @app.template_filter("sysmsg")
+    def sysmsg(text):
+        return render_msg(text, get_lang())
+
+    @app.template_filter("firstseen")
+    def firstseen(text):
+        # The curator's data uses "YYYY-MM-DD ar anksčiau" (= "or earlier").
+        return (text or "").replace(" ar anksčiau", " " + tr("or earlier", get_lang()))
 
     @app.template_filter("flag")
     def flag(code):

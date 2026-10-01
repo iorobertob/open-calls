@@ -5,7 +5,8 @@ Register an app in the LMTA tenant (Entra admin centre → App registrations):
   * Client secret → MS_CLIENT_SECRET; Application (client) ID → MS_CLIENT_ID; Directory (tenant) ID → MS_TENANT_ID
   * API permissions: Microsoft Graph → delegated `User.Read` (default) is enough.
 """
-from urllib.parse import urlparse
+import re
+from urllib.parse import urlencode, urlparse
 
 import msal
 from flask import Blueprint, abort, current_app, flash, redirect, request, session, url_for
@@ -28,6 +29,10 @@ def load_user(uid):
 def unauthorized():
     flash(tr("Please log in first."), "error")
     return redirect(url_for("auth.login", next=request.full_path))
+
+
+def _is_guid(value):
+    return bool(re.fullmatch(r"[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}", value or ""))
 
 
 def _msal_app():
@@ -96,7 +101,10 @@ def callback():
         return redirect(url_for("main.index"))
     claims = result.get("id_token_claims", {})
     tenant = current_app.config["MS_TENANT_ID"]
-    if tenant not in ("common", "organizations") and claims.get("tid") != tenant:
+    # MS_TENANT_ID may be the Directory (tenant) ID (a GUID) or a domain such as lmta.lt. The token's
+    # `tid` claim is always the GUID, so only compare when a GUID was configured; with a domain, the
+    # authority URL already restricts sign-in to that tenant.
+    if _is_guid(tenant) and claims.get("tid", "").lower() != tenant.lower():
         flash(tr("Only institutional accounts can log in."), "error")
         return redirect(url_for("main.index"))
     email = claims.get("email") or claims.get("preferred_username") or ""
@@ -128,6 +136,6 @@ def logout():
     session.pop("auth_flow", None)
     tenant = current_app.config["MS_TENANT_ID"]
     if current_app.config["MS_CLIENT_ID"]:
-        return redirect(f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/logout"
-                        f"?post_logout_redirect_uri={url_for('main.index', _external=True)}")
+        back = urlencode({"post_logout_redirect_uri": url_for("main.index", _external=True)})
+        return redirect(f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/logout?{back}")
     return redirect(url_for("main.index"))

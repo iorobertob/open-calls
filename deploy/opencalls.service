@@ -1,14 +1,19 @@
 # /etc/systemd/system/opencalls.service (rendered by remote-install.sh)
+# Gunicorn on a unix socket (no TCP port — nothing to collide with the other apps on this server).
+# Group www-data + RuntimeDirectory: nginx can reach the socket, nobody else can.
 [Unit]
 Description=MISC open calls (gunicorn)
 After=network.target
 
 [Service]
 User=__APP_USER__
-Group=__APP_USER__
+Group=www-data
 WorkingDirectory=__APP_DIR__
 EnvironmentFile=__APP_DIR__/.env
-ExecStart=__APP_DIR__/.venv/bin/gunicorn -w 3 -b 127.0.0.1:__APP_PORT__ --timeout 120 --access-logfile - wsgi:app
+RuntimeDirectory=opencalls
+RuntimeDirectoryMode=0750
+ExecStart=__APP_DIR__/.venv/bin/gunicorn --workers 3 --bind unix:__SOCKET__ --umask 007 --timeout 120 --access-logfile - wsgi:app
+ExecReload=/bin/kill -s HUP $MAINPID
 Restart=on-failure
 NoNewPrivileges=true
 PrivateTmp=true

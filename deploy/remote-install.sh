@@ -8,9 +8,9 @@ set -euo pipefail
 
 RELEASE_DIR="${1:?release dir}"
 ENV_FILE="${2:-}"
-APP_DIR="${APP_DIR:-/srv/opencalls}"
+APP_DIR="${APP_DIR:-/var/www/open-calls}"
 APP_USER="${APP_USER:-opencalls}"
-APP_PORT="${APP_PORT:-8010}"
+SOCKET=/run/opencalls/gunicorn.sock   # systemd RuntimeDirectory (see opencalls.service)
 URL_PREFIX="${URL_PREFIX:-/open-calls}"
 DOMAIN="${DOMAIN:-misc.lmta.lt}"
 NGINX_SITE="${NGINX_SITE:-}"          # auto-detected when empty
@@ -21,6 +21,13 @@ warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "run as root (sudo)"
+
+# One deploy at a time; never leave the uploaded .env (it holds credentials) lying around.
+exec 9>/run/opencalls-deploy.lock
+flock -n 9 || die "another deploy is running"
+trap '[[ -n "$ENV_FILE" ]] && rm -f "$ENV_FILE"' EXIT
+BACKUP_DIR=/var/backups/opencalls-nginx   # outside /etc/nginx so backups are never loaded as config
+mkdir -p "$BACKUP_DIR"
 command -v nginx >/dev/null || die "nginx not found"
 command -v rsync >/dev/null || die "rsync not found (apt install rsync)"
 
@@ -38,7 +45,7 @@ fi
 mkdir -p "$APP_DIR"
 log "syncing code to $APP_DIR"
 rsync -a --delete \
-  --exclude '.env' --exclude 'instance/' --exclude '.venv/' --exclude '__pycache__/' \
+  --exclude '.env' --exclude 'instance/' --exclude '.venv/' --exclude '.cache/' --exclude '__pycache__/' \
   "$RELEASE_DIR"/ "$APP_DIR"/
 
 # ---- .env: the uploaded developer .env + production overrides.
@@ -83,24 +90,44 @@ as_app .venv/bin/pip install -q --upgrade pip
 as_app .venv/bin/pip install -q -r requirements.txt
 log "migrating database"
 as_app .venv/bin/flask db upgrade
-as_app .venv/bin/flask init-db   # seeds the curated list only when the database is empty
+# Seed the curated list exactly once (a marker, so an emptied database is never re-seeded)
+if [[ ! -f instance/.seeded ]]; then
+  as_app .venv/bin/flask init-db
+  as_app touch instance/.seeded
+fi
 
 # ---- systemd
 render() { sed -e "s#__APP_DIR__#$APP_DIR#g" -e "s#__APP_USER__#$APP_USER#g" \
-               -e "s#__APP_PORT__#$APP_PORT#g" -e "s#__URL_PREFIX__#$URL_PREFIX#g" "$1"; }
+               -e "s#__SOCKET__#$SOCKET#g" -e "s#__URL_PREFIX__#$URL_PREFIX#g" "$1"; }
 log "installing systemd units"
+tzfix=(cat)
+if [[ ! -e /usr/share/zoneinfo/Europe/Vilnius ]]; then
+  warn "no tzdata for Europe/Vilnius (apt install tzdata) — timers use the server's local time"
+  tzfix=(sed 's/ Europe\/Vilnius$//')
+fi
+unit_changed=0
 for unit in opencalls.service opencalls-refresh.service opencalls-refresh.timer \
             opencalls-reminders.service opencalls-reminders.timer; do
-  render "deploy/$unit" > "/etc/systemd/system/$unit"
+  tmpu=$(mktemp); render "deploy/$unit" | "${tzfix[@]}" > "$tmpu"
+  if ! cmp -s "$tmpu" "/etc/systemd/system/$unit"; then
+    install -m 644 "$tmpu" "/etc/systemd/system/$unit"; unit_changed=1
+  fi
+  rm -f "$tmpu"
 done
-systemctl daemon-reload
+systemctl daemon-reload   # always: also recovers from a deploy interrupted right after writing units
 systemctl enable --now opencalls-refresh.timer opencalls-reminders.timer >/dev/null
 systemctl enable opencalls.service >/dev/null
-systemctl restart opencalls.service
+if [[ $unit_changed -eq 0 ]] && systemctl is-active --quiet opencalls.service; then
+  log "reloading gunicorn gracefully (no downtime)"
+  systemctl reload opencalls.service      # HUP: new workers with the new code, old ones finish requests
+  sleep 3
+else
+  systemctl restart opencalls.service
+fi
 
-log "waiting for gunicorn on 127.0.0.1:$APP_PORT"
+log "waiting for gunicorn on $SOCKET"
 for i in {1..20}; do
-  code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$APP_PORT/about" || true)
+  code=$(curl -s -o /dev/null -w '%{http_code}' --unix-socket "$SOCKET" "http://localhost/about" || true)
   [[ "$code" == 200 ]] && break
   sleep 1
 done
@@ -109,7 +136,22 @@ done
 # ---- nginx: snippet + include inside the WordPress server block
 log "installing nginx snippet $SNIPPET"
 mkdir -p /etc/nginx/snippets
-render deploy/nginx-open-calls.conf > "$SNIPPET"
+snippet_backup=""
+new_snippet=$(mktemp)
+render deploy/nginx-open-calls.conf > "$new_snippet"
+if [[ -f "$SNIPPET" ]] && cmp -s "$new_snippet" "$SNIPPET"; then
+  rm -f "$new_snippet"            # unchanged: nothing to write or back up
+else
+  if [[ -f "$SNIPPET" ]]; then
+    snippet_backup="$BACKUP_DIR/misc-open-calls.conf.$(date +%Y%m%d%H%M%S)"
+    cp -p "$SNIPPET" "$snippet_backup"
+  fi
+  install -m 644 "$new_snippet" "$SNIPPET"
+  rm -f "$new_snippet"
+fi
+restore_snippet() {
+  if [[ -n "$snippet_backup" ]]; then cp -p "$snippet_backup" "$SNIPPET"; else rm -f "$SNIPPET"; fi
+}
 
 if [[ -z "$NGINX_SITE" ]]; then
   NGINX_SITE=$(grep -lE "server_name[^;]*[[:space:]]$DOMAIN([[:space:]]|;)" \
@@ -119,27 +161,37 @@ fi
 NGINX_SITE=$(readlink -f "$NGINX_SITE")
 log "nginx site: $NGINX_SITE"
 
-if ! grep -q "include $SNIPPET;" "$NGINX_SITE"; then
-  backup="$NGINX_SITE.bak-opencalls-$(date +%Y%m%d%H%M%S)"
+# idempotent: only added when no include of the snippet exists yet (any spacing)
+if ! grep -qE "^[^#]*include[[:space:]]+$SNIPPET[[:space:]]*;" "$NGINX_SITE"; then
+  backup="$BACKUP_DIR/$(basename "$NGINX_SITE").$(date +%Y%m%d%H%M%S)"
   cp -p "$NGINX_SITE" "$backup"
-  log "adding include to every server block for $DOMAIN (backup: $backup)"
-  # insert right after each `server_name ... misc.lmta.lt ...;` line
-  awk -v dom="$DOMAIN" -v inc="    include $SNIPPET;  # MISC open calls" '
-    { print }
-    $0 ~ "server_name" && $0 ~ ("[[:space:]]" dom "([[:space:]]|;)") { print inc }
-  ' "$backup" > "$NGINX_SITE"
+  log "adding include to the HTTPS server block for $DOMAIN (backup: $backup)"
+  # after `server_name` in the block that has `listen 443` (the port-80 redirect block is left alone)
+  newsite=$(mktemp); rc=0; "$PY" deploy/nginx_include.py "$backup" "$DOMAIN" "$SNIPPET" > "$newsite" || rc=$?
+  if [[ $rc -ne 0 ]]; then
+    rm -f "$newsite"; restore_snippet
+    die "no 'listen 443' server block with server_name $DOMAIN in $NGINX_SITE — add 'include $SNIPPET;' manually"
+  fi
+  cat "$newsite" > "$NGINX_SITE"   # keeps the file's owner/permissions
+  rm -f "$newsite"
   if ! nginx -t 2>/tmp/opencalls-nginx-test; then
     cat /tmp/opencalls-nginx-test >&2
     cp -p "$backup" "$NGINX_SITE"
+    restore_snippet
     die "nginx config test failed — original restored. Add 'include $SNIPPET;' manually inside the HTTPS server block."
   fi
 else
-  nginx -t 2>/tmp/opencalls-nginx-test || { cat /tmp/opencalls-nginx-test >&2; die "nginx config test failed"; }
+  nginx -t 2>/tmp/opencalls-nginx-test || { cat /tmp/opencalls-nginx-test >&2; restore_snippet; die "nginx config test failed — previous snippet restored"; }
 fi
 systemctl reload nginx
 
 # ---- smoke test through nginx
-code=$(curl -s -o /dev/null -w '%{http_code}' --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN$URL_PREFIX/" || true)
+# (nginx reload returns before the new workers take over — retry for a few seconds)
+for i in {1..10}; do
+  code=$(curl -sk -o /dev/null -w '%{http_code}' --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN$URL_PREFIX/" || true)
+  [[ "$code" == 200 ]] && break
+  sleep 1
+done
 if [[ "$code" == 200 ]]; then
   log "OK: https://$DOMAIN$URL_PREFIX/ answers 200"
 else

@@ -86,7 +86,12 @@ Until both `MAILERLITE_API_KEY` and `MAILERLITE_REMINDER_GROUP_ID` are set, remi
 
 ## Production deployment — https://misc.lmta.lt/open-calls
 
-The app runs next to the WordPress site on the same nginx server. Gunicorn listens on `127.0.0.1:8010`. An nginx snippet included in the WordPress `server {}` block forwards `/open-calls/` to it and sends `X-Forwarded-Prefix`, so every link, redirect and cookie stays under `/open-calls`. The `^~` locations take priority over WordPress's regex rules, so the rest of the WordPress site is not affected.
+No Docker or containers: it is a plain Flask app served by **gunicorn**, managed by **systemd**, behind the existing **nginx**. It runs next to WordPress and the other apps on misc.lmta.lt (museum, ARJournal, journal, booking, kimo, tension…).
+
+- The code lives in `/var/www/open-calls` and runs as the system user `opencalls`.
+- Gunicorn listens on a **unix socket**, `/run/opencalls/gunicorn.sock` (owned by `opencalls:www-data`, mode 770), not on a TCP port, so it cannot clash with the other apps' ports.
+- `/etc/nginx/snippets/misc-open-calls.conf` is included in the HTTPS `server {}` block right after `server_name`, next to `lmta-museum.conf`. It forwards `/open-calls/` to the socket and sends `X-Forwarded-Prefix`, so every link, redirect and cookie stays under `/open-calls`.
+- Its `^~` locations take priority over the regex rules in that block (`\.php$`, the static-file caching rule, `~ /booking(.*)`), and they do not touch any other path.
 
 ```bash
 ./deploy/deploy.sh                 # first deploy and every update
@@ -98,11 +103,11 @@ SSH goes to `misc.lmta.lt` using your SSH config. If your server login differs f
 
 `remote-install.sh` also:
 
-- creates the `opencalls` system user and copies the code to `/srv/opencalls`
+- creates the `opencalls` system user and copies the code to `/var/www/open-calls`
 - installs the merged `.env` with mode 600
 - creates the virtualenv, runs migrations and seeds the list the first time
-- installs `opencalls.service` (gunicorn) plus the daily **refresh** (04:15) and **reminders** (09:00) timers
-- writes `/etc/nginx/snippets/misc-open-calls.conf` and adds `include` after the `server_name misc.lmta.lt` line(s), keeping a timestamped backup; if `nginx -t` fails, the original is restored
+- installs `opencalls.service` (gunicorn) plus the daily **refresh** (04:15) and **reminders** (09:00) timers; on later deploys gunicorn is reloaded gracefully, with no downtime
+- writes the nginx snippet and, the first time only, adds its `include` to the `listen 443` block for misc.lmta.lt (the port‑80 redirect block is left alone). A backup goes to `/var/backups/opencalls-nginx/`, and if `nginx -t` fails, both the site file and the snippet are restored
 - reloads nginx and checks that `https://misc.lmta.lt/open-calls/` returns 200
 
 Server requirements: a user with SSH and sudo, Python 3.10 or newer with `venv`, `rsync` and `curl`. If the site's nginx file cannot be found automatically, pass `NGINX_SITE=/etc/nginx/sites-available/<file>`. In the Entra app registration, add the redirect URI `https://misc.lmta.lt/open-calls/auth/callback`.

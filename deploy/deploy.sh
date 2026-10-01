@@ -57,9 +57,9 @@ log "uploading .env"
 ssh "$TARGET" "umask 077; cat > $RELEASE.env" < .env
 
 # Optional overrides for unusual servers (environment variables, rarely needed):
-# APP_DIR (/srv/opencalls) APP_USER (opencalls) APP_PORT (8010) NGINX_SITE (auto-detected) PYTHON (python3)
+# APP_DIR (/var/www/open-calls) APP_USER (opencalls) NGINX_SITE (auto-detected) PYTHON (python3)
 PASS_VARS=""
-for v in APP_DIR APP_USER APP_PORT NGINX_SITE PYTHON; do
+for v in APP_DIR APP_USER NGINX_SITE PYTHON; do
   if [[ -n "${!v:-}" ]]; then PASS_VARS+=" $v=$(printf '%q' "${!v}")"; fi
 done
 

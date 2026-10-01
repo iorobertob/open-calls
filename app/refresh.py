@@ -61,6 +61,9 @@ def check_call(call, use_llm=True):
     call.last_checked_at = utcnow()
     call.last_http_status = page.status or None
     changes = []
+    if page.blocked:
+        call.last_http_status = None   # bot protection, not a broken link: can't be checked automatically
+        return ["site blocks automatic checks"]
     if page.error or page.status >= 400:
         flag(call, msg("link_broken", status=str(page.status or page.error)))
         return ["broken link"]

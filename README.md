@@ -110,9 +110,76 @@ SSH goes to `misc.lmta.lt` using your SSH config. If your server login differs f
 - writes the nginx snippet and, the first time only, adds its `include` to the `listen 443` block for misc.lmta.lt (the port‑80 redirect block is left alone). A backup goes to `/var/backups/opencalls-nginx/`, and if `nginx -t` fails, both the site file and the snippet are restored
 - reloads nginx and checks that `https://misc.lmta.lt/open-calls/` returns 200
 
-Server requirements: a user with SSH and sudo, Python 3.10 or newer with `venv`, `rsync` and `curl`. If the site's nginx file cannot be found automatically, pass `NGINX_SITE=/etc/nginx/sites-available/<file>`. In the Entra app registration, add the redirect URI `https://misc.lmta.lt/open-calls/auth/callback`.
+Server requirements: a user with SSH and sudo, Python 3.10 or newer with `venv`, `rsync` and `curl`. If the site's nginx file cannot be found automatically, pass `NGINX_SITE=/etc/nginx/sites-available/<file>`. In the Entra app registration, the redirect URIs are `https://misc.lmta.lt/open-calls/auth/callback` (login) and `https://misc.lmta.lt/open-calls/` (after logout).
 
-Logs: `journalctl -u opencalls -f`, `journalctl -u opencalls-refresh`, `journalctl -u opencalls-reminders`.
+## Operations on the server
+
+Everything runs under systemd. There are no containers.
+
+| Unit | What it is |
+|---|---|
+| `opencalls.service` | The web app (gunicorn, socket `/run/opencalls/gunicorn.sock`). Restarts automatically if it crashes (`Restart=on-failure`) and starts on boot. |
+| `opencalls-refresh.timer` → `opencalls-refresh.service` | Daily 04:15 (Vilnius): archive expired entries, translate, re‑check organiser pages |
+| `opencalls-reminders.timer` → `opencalls-reminders.service` | Daily 09:00 (Vilnius): MailerLite deadline reminders |
+
+Code: `/var/www/open-calls` · settings: `/var/www/open-calls/.env` · database: `/var/www/open-calls/instance/opencalls.db` · nginx: `/etc/nginx/snippets/misc-open-calls.conf`
+
+**Is it running? Restart it**
+
+```bash
+sudo systemctl status opencalls            # running? last log lines
+sudo systemctl restart opencalls           # full restart (a second of downtime)
+sudo systemctl reload opencalls            # graceful: new workers, no downtime (after code/.env changes)
+sudo systemctl start opencalls             # if it is stopped
+```
+
+**If the site shows "502 Bad Gateway"**, the app is not answering. Work through these in order:
+
+```bash
+sudo systemctl status opencalls                       # failed? read the error at the bottom
+sudo journalctl -u opencalls -n 100 --no-pager        # full error (e.g. a bad .env value, missing package)
+ls -l /run/opencalls/gunicorn.sock                     # should exist, owner opencalls:www-data
+curl -s --unix-socket /run/opencalls/gunicorn.sock http://localhost/about -o /dev/null -w '%{http_code}\n'   # 200 = app OK
+sudo systemctl restart opencalls
+```
+
+If the app answers 200 on the socket but the site still fails, the problem is in nginx. Run `sudo nginx -t`, and check that the HTTPS server block still contains `include /etc/nginx/snippets/misc-open-calls.conf;`. Then `sudo systemctl reload nginx`. After a crash loop, systemd may refuse to start the service again ("start request repeated too quickly"). Run `sudo systemctl reset-failed opencalls`, then start it.
+
+**Logs**
+
+```bash
+sudo journalctl -u opencalls -f                  # live app log (requests, login errors)
+sudo journalctl -u opencalls-refresh -n 50       # last refresh run
+sudo journalctl -u opencalls-reminders -n 50     # last reminder run
+systemctl list-timers 'opencalls-*'              # when the jobs run next / ran last
+```
+
+**Run the daily jobs now**
+
+```bash
+sudo systemctl start opencalls-refresh       # refresh now (output in its journal)
+sudo systemctl start opencalls-reminders     # send due reminders now
+```
+
+**Run any `flask` command on the server** (as the app user, so file permissions stay correct):
+
+```bash
+cd /var/www/open-calls
+sudo -u opencalls env FLASK_APP=wsgi.py .venv/bin/flask send-reminders --dry-run
+sudo -u opencalls env FLASK_APP=wsgi.py .venv/bin/flask translate --dry-run
+sudo -u opencalls env FLASK_APP=wsgi.py .venv/bin/flask make-admin someone@lmta.lt
+```
+
+**Change a setting.** Edit `.env` on your computer and run `./deploy/deploy.sh`. If you edit `/var/www/open-calls/.env` directly on the server instead, run `sudo systemctl restart opencalls` afterwards, and copy the change into your local `.env`, or the next deploy will overwrite it.
+
+**Back up the database.** SQLite is a single file. Copy it safely while the app is running:
+
+```bash
+cd /var/www/open-calls
+sudo -u opencalls .venv/bin/python -c "import sqlite3,datetime; s=sqlite3.connect('instance/opencalls.db'); s.backup(sqlite3.connect(f'instance/backup-{datetime.date.today()}.db'))"
+```
+
+**Remove the app from the site** (WordPress and the other apps are unaffected): delete the `include /etc/nginx/snippets/misc-open-calls.conf;` line, run `sudo nginx -t && sudo systemctl reload nginx`, then `sudo systemctl disable --now opencalls opencalls-refresh.timer opencalls-reminders.timer`.
 
 ## Weekly workflow (compatibility)
 

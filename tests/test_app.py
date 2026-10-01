@@ -139,3 +139,21 @@ def test_reminders(app):
     db.session.get(Call, 1).deadline += timedelta(days=1)  # deadline moved → new reminder
     db.session.commit()
     assert send_reminders() == (1, 0)
+
+
+def test_blocked_page_detection():
+    from app.extract import Page
+    assert Page(url="x", status=403, title="Just a moment...", text="Just a moment...").blocked
+    assert Page(url="x", status=200, title="", text="Please verify you are human").blocked
+    assert not Page(url="x", status=200, title="Call for papers", text="Deadline 1 March 2027").blocked
+
+
+def test_add_by_link_with_pasted_text(app):
+    c = app.test_client()
+    login(c)
+    c.get("/lang/en")
+    r = c.post("/admin/import-url", data={"url": "https://example.org/cfp",
+                                          "page_text": "Call for papers. Deadline: 1 March 2027."})
+    html = r.get_data(as_text=True)
+    assert 'name="deadline" value="2027-03-01"' in html
+    assert "ANTHROPIC_API_KEY is not set" in html   # tells the admin exactly why AI was not used

@@ -131,6 +131,13 @@ LT = {
     'Upcoming deadlines of the calls you follow': 'Artėjantys jūsų sekamų kvietimų terminai',
     'Manage your subscriptions': 'Tvarkyti prenumeratas',
     'Deadline {date} ({days} days left)': 'Terminas {date} (liko {days} d.)',
+    'This site blocks automatic reading (HTTP {0}). Open the page in your browser, copy all its text into “Page text” and extract again.': 'Ši svetainė blokuoja automatinį nuskaitymą (HTTP {0}). Atidarykite puslapį naršyklėje, nukopijuokite visą tekstą į „Puslapio tekstas“ ir nuskaitykite dar kartą.',
+    'Could not open the page:': 'Nepavyko atidaryti puslapio:',
+    'ANTHROPIC_API_KEY is not set (restart the app after editing .env) — basic extraction only.': 'ANTHROPIC_API_KEY nenustatytas (pakeitę .env perkraukite programą) — atlikta tik bazinė analizė.',
+    'The Claude request failed — basic extraction only. Error:': 'Claude užklausa nepavyko — atlikta tik bazinė analizė. Klaida:',
+    'Claude declined to read this page — basic extraction only.': 'Claude atsisakė skaityti šį puslapį — atlikta tik bazinė analizė.',
+    'Site blocks automatic reading? Paste the page text': 'Svetainė blokuoja automatinį nuskaitymą? Įklijuokite puslapio tekstą',
+    'Open the page in your browser, select all (Cmd/Ctrl+A), copy and paste here.': 'Atidarykite puslapį naršyklėje, pažymėkite viską (Cmd/Ctrl+A), nukopijuokite ir įklijuokite čia.',
 }
 
 

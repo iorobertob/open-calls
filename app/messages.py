@@ -23,6 +23,8 @@ MESSAGES = {
     "link_broken": ("The link does not work ({status})", "Nuoroda neveikia ({status})"),
     "heuristic": ("Read automatically without AI — check every field.",
                   "Nuskaityta automatiškai be AI — patikrinkite visus laukus."),
+    "site_blocked": ("The site blocks automatic reading (HTTP {status}) — paste the page text instead",
+                     "Svetainė blokuoja automatinį nuskaitymą (HTTP {status}) — įklijuokite puslapio tekstą"),
     "page_unreachable": ("Could not open the page: {error}", "Nepavyko atidaryti puslapio: {error}"),
     "auto_translated": ("Missing translations filled in automatically", "Trūkstami vertimai užpildyti automatiškai"),
 }

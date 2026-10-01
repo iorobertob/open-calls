@@ -31,6 +31,9 @@
     <form method="post" action="{{ url_for('admin.import_url') }}" class="stack" onsubmit="this.querySelector('button').textContent='{{ _('Reading page…') }}'">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="url" name="url" required placeholder="https://organiser.org/open-call">
+      <details><summary class="hint">{{ _("Site blocks automatic reading? Paste the page text") }}</summary>
+        <textarea name="page_text" rows="6" placeholder="{{ _('Open the page in your browser, select all (Cmd/Ctrl+A), copy and paste here.') }}"></textarea>
+      </details>
       <button class="btn primary">{{ _("Extract & review") }}</button>
     </form>
     <p><a href="{{ url_for('admin.new') }}">+ {{ _("Add manually") }}</a> · <a href="{{ url_for('admin.users') }}">{{ _("Users") }}</a></p>

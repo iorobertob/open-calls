@@ -106,15 +106,25 @@ def import_url():
     dup = Call.query.filter_by(url=url).first()
     if dup:
         flash(tr("Already in the database:") + f" #{dup.id} {dup.title(get_lang())}", "error")
-    data, page, used_llm = extract_url(url)
+    data, page, used_llm = extract_url(url, request.form.get("page_text", ""))
     call = Call(status="open", first_seen=today().isoformat(), last_verified=today().isoformat(), verified=used_llm,
                 source=msg("admin_link"), url=url)
     apply_record(call, to_record(data))
     call.review_reason = data.get("review", "")
     if used_llm and data.get("confidence") == "low":
         flash(tr("Low-confidence extraction — check every field."), "error")
-    if not used_llm:
-        flash(tr("Claude API not configured or failed — basic extraction only."), "error")
+    code, detail = data.get("problem") or ("", "")
+    if code == "blocked":
+        flash(tr("This site blocks automatic reading (HTTP {0}). Open the page in your browser, copy all its text "
+                 "into “Page text” and extract again.").format(detail), "error")
+    elif code == "unreachable":
+        flash(tr("Could not open the page:") + " " + detail, "error")
+    elif code == "no_api_key":
+        flash(tr("ANTHROPIC_API_KEY is not set (restart the app after editing .env) — basic extraction only."), "error")
+    elif code == "llm_failed":
+        flash(tr("The Claude request failed — basic extraction only. Error:") + " " + detail, "error")
+    elif code == "llm_refused":
+        flash(tr("Claude declined to read this page — basic extraction only."), "error")
     if data.get("is_call") is False:
         flash(tr("The page does not look like an open call."), "error")
     return render_template("admin/form.html", c=call, extracted=True)

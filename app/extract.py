@@ -36,6 +36,15 @@ class Page(BaseModel):
     error: str = ""
 
     @property
+    def blocked(self):
+        """Bot protection (Cloudflare & co.) or access denied: the text is not the real page."""
+        if self.status in (401, 403, 429, 503):
+            return True
+        t = f"{self.title} {self.text[:300]}".lower()
+        return any(s in t for s in ("just a moment", "attention required", "are you a robot",
+                                    "verify you are human", "captcha", "access denied"))
+
+    @property
     def content_hash(self):
         # Hash the visible text only, so rotating ads / tokens in markup don't count as changes.
         norm = re.sub(r"\s+", " ", self.text).strip()
@@ -241,18 +250,45 @@ def heuristic(page: Page) -> dict:
     }
 
 
-def extract_url(url):
-    """Returns (fields: dict, page: Page, used_llm: bool)."""
-    page = fetch(url)
-    if page.error and not page.text:
-        return {"url": url, "review": msg("page_unreachable", error=page.error)}, page, False
-    if llm_available():
-        try:
-            ex = extract_with_claude(page)
-            if ex:
-                data = ex.model_dump()
-                data["url"] = page.final_url or url
-                return data, page, True
-        except Exception as e:  # network/API errors must not break the admin form
-            log.exception("Claude extraction failed: %s", e)
-    return heuristic(page), page, False
+def _describe(e):
+    """Short, readable reason for an API failure (shown to admins)."""
+    body = getattr(e, "body", None)
+    if isinstance(body, dict) and isinstance(body.get("error"), dict):
+        return f"HTTP {getattr(e, 'status_code', '?')} {body['error'].get('type', '')}: {body['error'].get('message', '')}"[:300]
+    return f"{type(e).__name__}: {e}"[:300]
+
+
+def extract_url(url, pasted_text=""):
+    """Returns (fields: dict, page: Page, used_llm: bool).
+
+    `pasted_text`: the page's text copied from a browser, for sites that block automated access.
+    When something goes wrong, fields["problem"] = (code, detail) with code in
+    blocked | unreachable | no_api_key | llm_failed | llm_refused."""
+    if pasted_text.strip():
+        page = Page(url=url, final_url=url, status=200, text=pasted_text.strip()[:MAX_TEXT])
+    else:
+        page = fetch(url)
+        if page.error and not page.text:
+            return {"url": url, "review": msg("page_unreachable", error=page.error),
+                    "problem": ("unreachable", page.error)}, page, False
+        if page.blocked:
+            data = {"url": url}
+            data.update(review=msg("site_blocked", status=str(page.status)), problem=("blocked", str(page.status)))
+            return data, page, False
+    if not llm_available():
+        data = heuristic(page)
+        data["problem"] = ("no_api_key", "")
+        return data, page, False
+    try:
+        ex = extract_with_claude(page)
+        if ex:
+            data = ex.model_dump()
+            data["url"] = page.final_url or url
+            return data, page, True
+        problem = ("llm_refused", "")
+    except Exception as e:  # network/API errors must not break the admin form
+        log.exception("Claude extraction failed: %s", e)
+        problem = ("llm_failed", _describe(e))
+    data = heuristic(page)
+    data["problem"] = problem
+    return data, page, False

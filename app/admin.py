@@ -1,6 +1,6 @@
 from functools import wraps
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from .auth import safe_next
@@ -177,10 +177,13 @@ def action(call_id):
                                   old=call.status, new="archived"))
         call.status = "archived"
     elif act == "delete":
+        # Permanent: also removes its change history, subscriptions and reminder records.
+        current_app.logger.warning("entry #%s '%s' deleted by %s (%s subscribers)", call.id,
+                                   call.title_en or call.title_lt, current_user.email, len(call.subscriptions))
         db.session.delete(call)
         db.session.commit()
         flash(tr("Deleted."), "ok")
-        return redirect(url_for(".dashboard"))
+        return redirect(safe_next(request.form.get("next"), url_for(".dashboard")))
     elif act == "recheck":
         ch = check_call(call)
         flash(tr("Re-checked:") + " " + (", ".join(ch) if ch else tr("no changes")), "ok")

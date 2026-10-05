@@ -207,3 +207,27 @@ def test_organiser_language_fallback(app):
     call.org_en = "University of Oldenburg"
     assert call.org_name("en") == "University of Oldenburg" and call.org_name("lt") == "Oldenburgo universitetas"
     assert ("org", "org_en") not in call.missing_translations()
+
+
+def test_admin_can_archive_and_delete(app):
+    from app.models import CallChange, ReminderSent, Subscription
+    c = app.test_client()
+    login(c)
+    c.get("/lang/en")
+    admin = User.query.filter_by(email="admin@lmta.lt").one()
+    db.session.add_all([Subscription(user_id=admin.id, call_id=2),
+                        ReminderSent(user_id=admin.id, call_id=2, deadline=date.today()),
+                        CallChange(call_id=2, field="note", new="x")])
+    db.session.commit()
+    page = c.get("/admin/call/2/edit").get_data(as_text=True)
+    assert "Delete permanently" in page and "Archive" in page and "Users subscribed to it: 1" in page
+    c.post("/admin/call/2/action", data={"action": "archive"})
+    assert db.session.get(Call, 2).status == "archived"
+    r = c.post("/admin/call/2/action", data={"action": "delete", "next": "/"})
+    assert r.headers["Location"] == "/"
+    assert db.session.get(Call, 2) is None
+    assert Subscription.query.count() == ReminderSent.query.count() == CallChange.query.filter_by(call_id=2).count() == 0
+    # students can't delete
+    c.get("/auth/logout"); login(c, "student@lmta.lt")
+    assert c.post("/admin/call/1/action", data={"action": "delete"}).status_code == 403
+    assert db.session.get(Call, 1) is not None

@@ -24,7 +24,8 @@
         {% if c.url %}<a class="btn primary" href="{{ c.url }}" target="_blank" rel="noopener">{{ _("Official page") }} ↗</a>{% endif %}
         {% if c.deadline or c.event_start %}<a class="btn" href="{{ url_for('main.call_ics', call_id=c.id) }}">📅 {{ _("Add to calendar") }}</a>{% endif %}
         {{ m.subscribe_button(c, request.path) }}
-        {% if user.is_authenticated and user.is_admin %}<a class="btn ghost" href="{{ url_for('admin.edit', call_id=c.id) }}">✎ {{ _("Edit") }}</a>{% endif %}
+        {% if user.is_authenticated and user.is_admin %}<a class="btn ghost" href="{{ url_for('admin.edit', call_id=c.id) }}">✎ {{ _("Edit") }}</a>
+        <a class="btn ghost" href="{{ url_for('admin.edit', call_id=c.id) }}#remove">🗑 {{ _("Archive or delete") }}</a>{% endif %}
       </div>
     </div>
   </div>

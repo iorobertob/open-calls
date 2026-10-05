@@ -145,6 +145,12 @@ LT = {
     'similar title': 'panašus pavadinimas',
     'If it is the same call, edit the existing entry instead. Several calls can share one page — then save this one too.': 'Jei tai tas pats kvietimas, redaguokite esamą įrašą. Keli kvietimai gali būti tame pačiame puslapyje — tada išsaugokite ir šį.',
     'It is a different call': 'Tai kitas kvietimas',
+    'Remove this entry': 'Pašalinti šį įrašą',
+    'Archive hides it from the lists but keeps it (you can restore it by changing its status). Delete removes it permanently, with its history.': 'Archyvavus įrašas paslepiamas iš sąrašų, bet išsaugomas (jį galima atkurti pakeitus būseną). Ištrynus jis pašalinamas visam laikui kartu su istorija.',
+    'Users subscribed to it:': 'Prenumeruojančių naudotojų:',
+    'Delete “{0}” permanently? This cannot be undone.': 'Ištrinti „{0}“ visam laikui? Šio veiksmo atšaukti negalima.',
+    'Delete permanently': 'Ištrinti visam laikui',
+    'Archive or delete': 'Archyvuoti arba ištrinti',
 }
 
 

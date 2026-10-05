@@ -72,4 +72,25 @@
     <a class="btn ghost" href="{{ url_for('admin.dashboard') }}">{{ _("Cancel") }}</a>
   </div>
 </form>
+
+{% if c.id %}
+<section class="panel danger" id="remove">
+  <h2>{{ _("Remove this entry") }}</h2>
+  <p class="hint">{{ _("Archive hides it from the lists but keeps it (you can restore it by changing its status). Delete removes it permanently, with its history.") }}
+    {% if c.subscriptions %}<b>{{ _("Users subscribed to it:") }} {{ c.subscriptions|length }}</b>{% endif %}</p>
+  <div class="acts">
+    {% if c.status != 'archived' %}
+    <form method="post" action="{{ url_for('admin.action', call_id=c.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="archive">
+      <input type="hidden" name="next" value="{{ url_for('admin.edit', call_id=c.id) }}">
+      <button class="btn">{{ _("Archive") }}</button></form>
+    {% endif %}
+    <form method="post" action="{{ url_for('admin.action', call_id=c.id) }}"
+          onsubmit="return confirm({{ (_('Delete “{0}” permanently? This cannot be undone.').format(c.title(lang)) ~ ((' ' ~ _('Users subscribed to it:') ~ ' ' ~ c.subscriptions|length|string) if c.subscriptions else ''))|tojson|forceescape }})">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="delete">
+      <input type="hidden" name="next" value="{{ url_for('main.index') }}">
+      <button class="btn danger">🗑 {{ _("Delete permanently") }}</button></form>
+  </div>
+</section>
+{% endif %}
 {% endblock %}

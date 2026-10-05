@@ -47,6 +47,54 @@
   <span>© LMTA · <a href="https://misc.lmta.lt">{{ _("Music Innovation Studies Centre") }}</a></span>
   <span><a href="{{ url_for('main.api_export') }}">JSON</a> · <a href="{{ url_for('main.screen') }}">TV</a></span>
 </footer>
+
+{# Site-wide modal used instead of the browser's alert()/confirm().
+   Forms: <form data-confirm="Question?" data-confirm-title="…" data-confirm-ok="Delete" data-danger> ;
+   scripts: miscConfirm({message, title, ok, danger}).then(yes => …) / miscAlert(message, title). #}
+<dialog id="miscModal" class="modal" aria-labelledby="miscModalTitle" aria-describedby="miscModalMsg">
+  <form method="dialog" class="modal-box">
+    <h2 id="miscModalTitle"></h2>
+    <p id="miscModalMsg"></p>
+    <div class="modal-acts">
+      <button value="cancel" class="btn ghost" id="miscModalCancel">{{ _("Cancel") }}</button>
+      <button value="ok" class="btn primary" id="miscModalOk">{{ _("OK") }}</button>
+    </div>
+  </form>
+</dialog>
+<script>
+(function(){
+  var dlg = document.getElementById('miscModal'), ttl = document.getElementById('miscModalTitle'),
+      msg = document.getElementById('miscModalMsg'), ok = document.getElementById('miscModalOk'),
+      cancel = document.getElementById('miscModalCancel'),
+      T = {confirm: {{ _("Please confirm")|tojson }}, notice: {{ _("Notice")|tojson }},
+           ok: {{ _("OK")|tojson }}, yes: {{ _("Confirm")|tojson }}};
+  function open(o){
+    return new Promise(function(resolve){
+      ttl.textContent = o.title || (o.alert ? T.notice : T.confirm);
+      msg.textContent = o.message || '';
+      ok.textContent = o.ok || (o.alert ? T.ok : T.yes);
+      ok.className = 'btn ' + (o.danger ? 'danger-solid' : 'primary');
+      cancel.hidden = !!o.alert;
+      dlg.returnValue = '';
+      dlg.onclose = function(){ resolve(dlg.returnValue === 'ok'); };
+      dlg.showModal();
+      (o.danger ? cancel : ok).focus();      // safe default: Enter cancels a destructive action
+    });
+  }
+  window.miscConfirm = function(o){ return open(typeof o === 'string' ? {message: o} : o); };
+  window.miscAlert = function(message, title){ return open({message: message, title: title, alert: true}); };
+  dlg.addEventListener('click', function(e){ if (e.target === dlg) dlg.close('cancel'); });   // click outside = cancel
+  document.addEventListener('submit', function(e){
+    var f = e.target;
+    if (!f.matches('form[data-confirm]') || f.dataset.confirmed) return;
+    e.preventDefault();
+    miscConfirm({message: f.dataset.confirm, title: f.dataset.confirmTitle, ok: f.dataset.confirmOk,
+                 danger: f.hasAttribute('data-danger')}).then(function(yes){
+      if (yes) { f.dataset.confirmed = '1'; f.submit(); }
+    });
+  });
+})();
+</script>
 <script>
 document.getElementById('theme').onclick=function(){var r=document.documentElement,
  cur=r.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'),

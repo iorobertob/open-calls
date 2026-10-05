@@ -10,7 +10,7 @@
   <div class="acts">
     <a class="btn primary" href="{{ webcal }}">{{ _("Open in Outlook / Apple Calendar") }}</a>
     <a class="btn" href="{{ feed }}">📅 {{ _("Download calendar (.ics)") }}</a>
-    <form method="post" action="{{ url_for('main.reset_feed') }}" onsubmit="return confirm('?')">
+    <form method="post" action="{{ url_for('main.reset_feed') }}" data-confirm="{{ _('Calendars that use the current address will stop updating, and you will need to add the new address to them.') }}" data-confirm-title="{{ _('Reset feed address') }}?" data-confirm-ok="{{ _('Reset') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn ghost">{{ _("Reset feed address") }}</button></form>
   </div>
 </section>

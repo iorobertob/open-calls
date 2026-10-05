@@ -86,7 +86,8 @@
       <button class="btn">{{ _("Archive") }}</button></form>
     {% endif %}
     <form method="post" action="{{ url_for('admin.action', call_id=c.id) }}"
-          onsubmit="return confirm({{ (_('Delete “{0}” permanently? This cannot be undone.').format(c.title(lang)) ~ ((' ' ~ _('Users subscribed to it:') ~ ' ' ~ c.subscriptions|length|string) if c.subscriptions else ''))|tojson|forceescape }})">
+          data-confirm="{{ _('Delete “{0}” permanently? This cannot be undone.').format(c.title(lang)) }}{% if c.subscriptions %} {{ _('Users subscribed to it:') }} {{ c.subscriptions|length }}.{% endif %}"
+          data-confirm-title="{{ _('Delete permanently') }}" data-confirm-ok="{{ _('Delete') }}" data-danger>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="delete">
       <input type="hidden" name="next" value="{{ url_for('main.index') }}">
       <button class="btn danger">🗑 {{ _("Delete permanently") }}</button></form>

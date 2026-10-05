@@ -10,7 +10,7 @@
   <td class="acts">
     <a class="btn ghost" href="{{ url_for('admin.edit', call_id=c.id) }}">{{ _("Edit") }}</a>
     {% for a in actions %}
-    <form method="post" action="{{ url_for('admin.action', call_id=c.id) }}" {% if a == 'delete' %}onsubmit="return confirm('{{ _('Delete permanently?') }}')"{% endif %}>
+    <form method="post" action="{{ url_for('admin.action', call_id=c.id) }}" {% if a == 'delete' %}data-confirm="{{ _('Delete “{0}” permanently? This cannot be undone.').format(c.title(lang)) }}" data-confirm-title="{{ _('Delete permanently') }}" data-confirm-ok="{{ _('Delete') }}" data-danger{% endif %}>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="{{ a }}">
       <button class="btn {{ 'primary' if a in ('approve', 'reviewed') }}">{{ _(ACTION_LABELS[a]) }}</button></form>
     {% endfor %}

@@ -151,6 +151,12 @@ LT = {
     'Delete “{0}” permanently? This cannot be undone.': 'Ištrinti „{0}“ visam laikui? Šio veiksmo atšaukti negalima.',
     'Delete permanently': 'Ištrinti visam laikui',
     'Archive or delete': 'Archyvuoti arba ištrinti',
+    'OK': 'Gerai',
+    'Confirm': 'Patvirtinti',
+    'Please confirm': 'Patvirtinkite',
+    'Notice': 'Pranešimas',
+    'Reset': 'Atstatyti',
+    'Calendars that use the current address will stop updating, and you will need to add the new address to them.': 'Kalendoriai, naudojantys dabartinį adresą, nustos atsinaujinti — į juos reikės įtraukti naują adresą.',
 }
 
 

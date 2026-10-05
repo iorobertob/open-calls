@@ -184,3 +184,15 @@ table.adm td.acts{justify-content:flex-end;white-space:nowrap}
 .panel.danger{border-color:color-mix(in srgb,var(--urg) 45%,var(--line))}
 .btn.danger{color:var(--urg);border-color:color-mix(in srgb,var(--urg) 50%,var(--line))}
 .btn.danger:hover{background:var(--urgbg)}
+
+/* site-wide confirmation / notice modal (replaces alert/confirm) */
+.modal{margin:auto;border:0;padding:0;background:transparent;overflow:visible;max-width:min(460px,calc(100vw - 32px));width:100%;color:var(--fg)}
+.modal::backdrop{background:rgba(10,12,16,.55);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+.modal-box{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.modal-box h2{font-size:18px;margin-bottom:8px}
+.modal-box p{color:var(--fg);font-size:15px;line-height:1.5;white-space:pre-line}
+.modal-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.modal[open]{animation:modal-in .14s ease-out}
+@keyframes modal-in{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.modal[open]{animation:none}}
+.btn.danger-solid{background:var(--urg);border-color:var(--urg);color:#fff}

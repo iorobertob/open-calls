@@ -138,6 +138,13 @@ LT = {
     'Claude declined to read this page — basic extraction only.': 'Claude atsisakė skaityti šį puslapį — atlikta tik bazinė analizė.',
     'Site blocks automatic reading? Paste the page text': 'Svetainė blokuoja automatinį nuskaitymą? Įklijuokite puslapio tekstą',
     'Open the page in your browser, select all (Cmd/Ctrl+A), copy and paste here.': 'Atidarykite puslapį naršyklėje, pažymėkite viską (Cmd/Ctrl+A), nukopijuokite ir įklijuokite čia.',
+    'Organiser (LT)': 'Organizatorius (LT)', 'Organiser (EN)': 'Organizatorius (EN)',
+    'This may already be in the database. Check the entries below; to save anyway, tick “It is a different call” and save again.': 'Šis kvietimas galbūt jau yra duomenų bazėje. Patikrinkite žemiau esančius įrašus; jei vis tiek norite išsaugoti, pažymėkite „Tai kitas kvietimas“ ir išsaugokite dar kartą.',
+    'Possibly already in the database': 'Galbūt jau yra duomenų bazėje',
+    'same link': 'ta pati nuoroda',
+    'similar title': 'panašus pavadinimas',
+    'If it is the same call, edit the existing entry instead. Several calls can share one page — then save this one too.': 'Jei tai tas pats kvietimas, redaguokite esamą įrašą. Keli kvietimai gali būti tame pačiame puslapyje — tada išsaugokite ir šį.',
+    'It is a different call': 'Tai kitas kvietimas',
 }
 
 

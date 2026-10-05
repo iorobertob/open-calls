@@ -14,7 +14,7 @@
       <h1>{{ c.title(lang) }}</h1>
       {% set other = c.title_en if lang == 'lt' else c.title_lt %}
       {% if other and other != c.title(lang) %}<p class="ten">{{ other }}</p>{% endif %}
-      <p class="org">{{ c.country_code|flag }} {{ c.org }}{% if c.city(lang) %} · {{ c.city(lang) }}{% endif %}{% if c.country(lang) %}, {{ c.country(lang) }}{% endif %}</p>
+      <p class="org">{{ c.country_code|flag }} {{ c.org_name(lang) }}{% if c.city(lang) %} · {{ c.city(lang) }}{% endif %}{% if c.country(lang) %}, {{ c.country(lang) }}{% endif %}</p>
     </div>
     <div class="dbox">
       {% if c.deadline %}<small>{{ _("Deadline") }}</small><b class="big">{{ c.deadline|fmtdate(lang) }}</b>
@@ -48,7 +48,7 @@
 
   <p class="prov">
     {% if not c.verified %}<b>⚠ {{ _("Not verified — open manually") }}</b> · {% endif %}
-    {% if c.source %}{{ _("Found via") }}: {% if c.source_url %}<a href="{{ c.source_url }}" rel="noopener">{{ c.source|sysmsg }}</a>{% else %}{{ c.source|sysmsg }}{% endif %} · {% endif %}
+    {% if c.source_text(lang) %}{{ _("Found via") }}: {% if c.source_url %}<a href="{{ c.source_url }}" rel="noopener">{{ c.source_text(lang)|sysmsg }}</a>{% else %}{{ c.source_text(lang)|sysmsg }}{% endif %} · {% endif %}
     {% if c.first_seen %}{{ _("First seen") }}: {{ c.first_seen|firstseen }} · {% endif %}
     {% if c.last_verified %}{{ _("Last verified") }}: {{ c.last_verified }}{% endif %}
   </p>

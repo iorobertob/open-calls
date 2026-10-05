@@ -36,6 +36,7 @@ class Config:
 
     # Claude (link extraction + periodic re-checks)
     ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+    ANTHROPIC_WORKSPACE_ID = os.environ.get("ANTHROPIC_WORKSPACE_ID", "")   # only for keys not scoped to a workspace
     CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-opus-5-5")
     CLAUDE_EFFORT = os.environ.get("CLAUDE_EFFORT", "medium")
 

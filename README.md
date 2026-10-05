@@ -88,29 +88,65 @@ Until both `MAILERLITE_API_KEY` and `MAILERLITE_REMINDER_GROUP_ID` are set, remi
 
 No Docker or containers: it is a plain Flask app served by **gunicorn**, managed by **systemd**, behind the existing **nginx**. It runs next to WordPress and the other apps on misc.lmta.lt (museum, ARJournal, journal, booking, kimo, tension…).
 
-- The code lives in `/var/www/open-calls` and runs as the system user `opencalls`.
-- Gunicorn listens on a **unix socket**, `/run/opencalls/gunicorn.sock` (owned by `opencalls:www-data`, mode 770), not on a TCP port, so it cannot clash with the other apps' ports.
-- `/etc/nginx/snippets/misc-open-calls.conf` is included in the HTTPS `server {}` block right after `server_name`, next to `lmta-museum.conf`. It forwards `/open-calls/` to the socket and sends `X-Forwarded-Prefix`, so every link, redirect and cookie stays under `/open-calls`.
-- Its `^~` locations take priority over the regex rules in that block (`\.php$`, the static-file caching rule, `~ /booking(.*)`), and they do not touch any other path.
+**Layout:** the git clone **is** the installed app, in `/var/www/open-calls`.
+
+| Path | Owner / mode | Why |
+|---|---|---|
+| `/var/www/open-calls` (code, `.venv`) | you (the user who runs `git pull`) | You update with `git pull`; the app can read its code but not modify it |
+| `.env` (git‑ignored) | you, group `opencalls`, 640 | The settings file; the service can read it, other users can't |
+| `instance/` (SQLite database) | `opencalls`, 750 | The only place the app writes |
+
+- The service runs as the system user `opencalls`. Gunicorn listens on a **unix socket**, `/run/opencalls/gunicorn.sock` (`opencalls:www-data`), not on a TCP port, so it cannot clash with the other apps' ports.
+- `/etc/nginx/snippets/misc-open-calls.conf` is included in the HTTPS `server {}` block right after `server_name`, next to `lmta-museum.conf`. It forwards `/open-calls/` to the socket and sends `X-Forwarded-Prefix`, so every link, redirect and cookie stays under `/open-calls`. Its `^~` locations take priority over the regex rules in that block (`\.php$`, the static-file caching rule, `~ /booking(.*)`) and don't touch any other path.
+
+### First installation
 
 ```bash
-./deploy/deploy.sh                 # first deploy and every update
+sudo git clone https://github.com/iorobertob/open-calls.git /var/www/open-calls
+sudo chown -R "$(whoami)": /var/www/open-calls
+cd /var/www/open-calls
+cp .env.example .env && nano .env        # MS_*, ADMIN_EMAILS, MAILERLITE_*, ANTHROPIC_API_KEY
+./deploy/deploy.sh
 ```
 
-There is a single settings file, `.env`, used both locally and on the server. `deploy.sh` runs the tests, uploads the code (excluding local databases and venvs) and your `.env`, then runs `deploy/remote-install.sh` on the server with sudo. Values that must differ in production are set on the server automatically: `DEV_LOGIN=0`, `APP_PREFIX=/open-calls`, `PUBLIC_BASE_URL`, secure HTTPS cookies, and a server‑only `SECRET_KEY` that is generated once and kept across deploys. To change a credential, edit `.env` and deploy again.
+### Every update
 
-SSH goes to `misc.lmta.lt` using your SSH config. If your server login differs from your local username, add `User` under `Host misc.lmta.lt` in `~/.ssh/config`, or set `DEPLOY_SSH=user@misc.lmta.lt` in `.env`.
+Push from your computer, then on the server:
 
-`remote-install.sh` also:
+```bash
+cd /var/www/open-calls
+git pull
+./deploy/deploy.sh
+```
 
-- creates the `opencalls` system user and copies the code to `/var/www/open-calls`
-- installs the merged `.env` with mode 600
-- creates the virtualenv, runs migrations and seeds the list the first time
-- installs `opencalls.service` (gunicorn) plus the daily **refresh** (04:15) and **reminders** (09:00) timers; on later deploys gunicorn is reloaded gracefully, with no downtime
-- writes the nginx snippet and, the first time only, adds its `include` to the `listen 443` block for misc.lmta.lt (the port‑80 redirect block is left alone). A backup goes to `/var/backups/opencalls-nginx/`, and if `nginx -t` fails, both the site file and the snippet are restored
+Run `deploy.sh` as yourself, not with sudo. It refuses to run as root and asks for sudo itself. It runs `deploy/install.sh`, which is idempotent:
+
+- creates the `opencalls` system user (once)
+- applies the production values in `.env`: `DEV_LOGIN=0`, `APP_PREFIX=/open-calls`, `PUBLIC_BASE_URL`, HTTPS cookies, and a strong `SECRET_KEY` if missing; everything else in `.env` is left as you wrote it
+- sets the permissions in the table above
+- creates/updates the virtualenv (as you), runs database migrations (as `opencalls`), and seeds the curated list the first time only
+- installs `opencalls.service` plus the daily **refresh** (04:15) and **reminders** (09:00) timers, then reloads gunicorn gracefully (no downtime)
+- writes the nginx snippet and, the first time only, adds its `include` to the `listen 443` block for misc.lmta.lt (the port‑80 redirect block is left alone). A backup goes to `/var/backups/opencalls-nginx/`; if `nginx -t` fails, the site file and snippet are restored
 - reloads nginx and checks that `https://misc.lmta.lt/open-calls/` returns 200
 
-Server requirements: a user with SSH and sudo, Python 3.10 or newer with `venv`, `rsync` and `curl`. If the site's nginx file cannot be found automatically, pass `NGINX_SITE=/etc/nginx/sites-available/<file>`. In the Entra app registration, the redirect URIs are `https://misc.lmta.lt/open-calls/auth/callback` (login) and `https://misc.lmta.lt/open-calls/` (after logout).
+Nothing in the clone is copied or deleted, and `git status` stays clean.
+
+Server requirements: a user with sudo, git, Python 3.10 or newer with `venv`, and `curl`. If the site's nginx file cannot be found automatically, pass `NGINX_SITE=/etc/nginx/sites-available/<file>`. In the Entra app registration, the redirect URIs are `https://misc.lmta.lt/open-calls/auth/callback` (login) and `https://misc.lmta.lt/open-calls/` (after logout).
+
+### Moving from the earlier (copied) layout
+
+The first version of the deploy script copied the code into `/var/www/open-calls` without `.git`. To switch to the clone layout, keeping the database and settings:
+
+```bash
+sudo systemctl stop opencalls
+sudo mv /var/www/open-calls /var/www/open-calls.old
+sudo git clone https://github.com/iorobertob/open-calls.git /var/www/open-calls
+sudo chown -R "$(whoami)": /var/www/open-calls
+sudo cp -a /var/www/open-calls.old/instance /var/www/open-calls/
+sudo cp /var/www/open-calls.old/.env /var/www/open-calls/.env
+cd /var/www/open-calls && ./deploy/deploy.sh
+# check the site, then: sudo rm -rf /var/www/open-calls.old
+```
 
 ## Operations on the server
 
@@ -129,7 +165,7 @@ Code: `/var/www/open-calls` · settings: `/var/www/open-calls/.env` · database:
 ```bash
 sudo systemctl status opencalls            # running? last log lines
 sudo systemctl restart opencalls           # full restart (a second of downtime)
-sudo systemctl reload opencalls            # graceful: new workers, no downtime (after code/.env changes)
+sudo systemctl reload opencalls            # graceful: new workers, no downtime (after code changes)
 sudo systemctl start opencalls             # if it is stopped
 ```
 
@@ -170,7 +206,7 @@ sudo -u opencalls env FLASK_APP=wsgi.py .venv/bin/flask translate --dry-run
 sudo -u opencalls env FLASK_APP=wsgi.py .venv/bin/flask make-admin someone@lmta.lt
 ```
 
-**Change a setting.** Edit `.env` on your computer and run `./deploy/deploy.sh`. If you edit `/var/www/open-calls/.env` directly on the server instead, run `sudo systemctl restart opencalls` afterwards, and copy the change into your local `.env`, or the next deploy will overwrite it.
+**Change a setting.** Edit `/var/www/open-calls/.env` on the server (it's yours, no sudo needed), then `sudo systemctl restart opencalls`. Use restart, not reload: systemd reads `.env` only when the service starts. Your local `.env` is only for running the app on your computer; it is never uploaded.
 
 **Back up the database.** SQLite is a single file. Copy it safely while the app is running:
 
@@ -200,6 +236,6 @@ app/
   views.py, admin.py, cli.py, scheduler.py
   screen_template.html   the MISC TV-screen template, filled by /screen
 seed/            initial curated data
-deploy/          deploy.sh, remote-install.sh, systemd units/timers, nginx snippet
+deploy/          deploy.sh (run on the server), install.sh, systemd units/timers, nginx snippet
 migrations/      Alembic migrations
 ```

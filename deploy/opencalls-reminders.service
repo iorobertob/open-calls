@@ -8,4 +8,5 @@ User=__APP_USER__
 WorkingDirectory=__APP_DIR__
 EnvironmentFile=__APP_DIR__/.env
 Environment=FLASK_APP=wsgi.py
+Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStart=__APP_DIR__/.venv/bin/flask send-reminders

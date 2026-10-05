@@ -26,6 +26,10 @@ STATUSES = ("open", "watch", "reject", "pending", "archived")
 # Detail fields stored as <name> (Lithuanian) + <name>_en (English).
 DETAIL_FIELDS = ("kam_tinka", "nauda", "mokestis", "amzius", "padengiama", "nuotoliu", "registracija",
                  "studentu_nuolaida", "note")
+# Single fields written in Lithuanian by the curator (organiser names, provenance) + an <name>_en version.
+NAME_FIELDS = ("org", "source")
+# Every <name> + <name>_en pair (detail texts and names)
+SINGLE_PAIRS = DETAIL_FIELDS + NAME_FIELDS
 # Short bilingual pairs stored as <name>_lt / <name>_en.
 PAIR_FIELDS = ("title", "desc", "city", "country", "deadline_word")
 
@@ -42,6 +46,7 @@ class Call(db.Model):
     title_lt = db.Column(db.String(400), default="")
     title_en = db.Column(db.String(400), default="")
     org = db.Column(db.String(400), default="")
+    org_en = db.Column(db.String(400), default="")
     city_lt = db.Column(db.String(160), default="")
     city_en = db.Column(db.String(160), default="")
     country_lt = db.Column(db.String(160), default="")
@@ -82,6 +87,7 @@ class Call(db.Model):
     note_en = db.Column(db.Text, default="")
 
     source = db.Column(db.String(400), default="")
+    source_en = db.Column(db.String(400), default="")
     source_url = db.Column(db.String(1000), default="")
     first_seen = db.Column(db.String(40), default="")
     last_verified = db.Column(db.String(40), default="")
@@ -134,10 +140,22 @@ class Call(db.Model):
             return (en, False) if en else (lt, bool(lt))
         return (lt, False) if lt else (en, bool(en))
 
+    def org_name(self, lang):
+        return self.detail("org", lang)[0]
+
+    def source_text(self, lang):
+        return self.detail("source", lang)[0]
+
     def missing_translations(self):
-        """Field pairs where exactly one language is filled in."""
-        pairs = [(f + "_lt", f + "_en") for f in PAIR_FIELDS] + [(f, f + "_en") for f in DETAIL_FIELDS]
-        return [(a, b) for a, b in pairs if bool(getattr(self, a)) != bool(getattr(self, b))]
+        """Field pairs where exactly one language is filled in. System messages (⟦…⟧ tokens) are
+        already bilingual and are skipped."""
+        pairs = [(f + "_lt", f + "_en") for f in PAIR_FIELDS] + [(f, f + "_en") for f in SINGLE_PAIRS]
+        out = []
+        for a, b in pairs:
+            va, vb = getattr(self, a) or "", getattr(self, b) or ""
+            if bool(va) != bool(vb) and "⟦" not in va + vb:
+                out.append((a, b))
+        return out
 
     @property
     def region(self):
@@ -201,7 +219,7 @@ class Call(db.Model):
             "kamTinka": self.kam_tinka, "nauda": self.nauda, "mokestis": self.mokestis,
             "amzius": self.amzius, "padengiama": self.padengiama, "nuotoliu": self.nuotoliu,
             "registracija": self.registracija, "studentuNuolaida": self.studentu_nuolaida,
-            "note": self.note, **{_camel(f) + "En": getattr(self, f + "_en") for f in DETAIL_FIELDS},
+            "note": self.note, **{_camel(f) + "En": getattr(self, f + "_en") for f in SINGLE_PAIRS},
             "source": self.source, "sourceUrl": self.source_url,
             "firstSeen": self.first_seen, "lastVerified": self.last_verified,
             "expires": self.expires.isoformat() if self.expires else "",

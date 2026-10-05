@@ -26,6 +26,8 @@ MESSAGES = {
     "site_blocked": ("The site blocks automatic reading (HTTP {status}) — paste the page text instead",
                      "Svetainė blokuoja automatinį nuskaitymą (HTTP {status}) — įklijuokite puslapio tekstą"),
     "page_unreachable": ("Could not open the page: {error}", "Nepavyko atidaryti puslapio: {error}"),
+    "possible_duplicate_link": ("Possible duplicate of #{id} (same link)", "Galimas dublikatas: #{id} (ta pati nuoroda)"),
+    "possible_duplicate_title": ("Possible duplicate of #{id} (similar title)", "Galimas dublikatas: #{id} (panašus pavadinimas)"),
     "auto_translated": ("Missing translations filled in automatically", "Trūkstami vertimai užpildyti automatiškai"),
 }
 

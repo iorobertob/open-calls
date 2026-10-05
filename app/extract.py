@@ -93,7 +93,9 @@ class Extraction(BaseModel):
     kind: KindLit
     title_en: str
     title_lt: str = Field(description="Natural Lithuanian translation of the title")
-    org: str
+    org: str = Field(description="Organiser as written in Lithuanian (proper names unchanged; translate generic words, "
+                                 "e.g. 'Universität Wien' stays, 'Faculty of Music' → 'Muzikos fakultetas')")
+    org_en: str = Field(description="Organiser in English / original form")
     city_en: str
     city_lt: str
     country_en: str
@@ -159,7 +161,10 @@ say so in `note`. Dates are ISO YYYY-MM-DD. Fields marked LT are written in Lith
 def _client():
     import anthropic
     key = current_app.config.get("ANTHROPIC_API_KEY")
-    return anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
+    # Organisation-level API keys (not scoped to one workspace) must say which workspace to bill.
+    workspace = current_app.config.get("ANTHROPIC_WORKSPACE_ID")
+    headers = {"anthropic-workspace-id": workspace} if workspace else None
+    return anthropic.Anthropic(api_key=key, default_headers=headers) if key else anthropic.Anthropic(default_headers=headers)
 
 
 def parse_with_fallback(**kwargs):

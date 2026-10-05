@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Installs / updates MISC open calls on the server. Run as root (deploy.sh calls it via sudo):
+# Installs / updates MISC open calls IN PLACE, in the git clone this script belongs to
+# (normally /var/www/open-calls). Run as root — deploy/deploy.sh does it for you:
 #
-#   sudo bash remote-install.sh <release_dir> [uploaded .env]
+#   cd /var/www/open-calls && git pull && ./deploy/deploy.sh
 #
-# Idempotent: safe to re-run for every update. Settings via environment (defaults below).
+# Layout:  the clone (code, .venv) belongs to you (the user who runs `git pull`);
+#          the service user `opencalls` only reads the code and writes instance/ (the database);
+#          .env is yours, readable by the service (mode 640), never by other users.
+# Idempotent: safe to re-run for every update. Nothing in the clone is copied or deleted.
 set -euo pipefail
 
-RELEASE_DIR="${1:?release dir}"
-ENV_FILE="${2:-}"
-APP_DIR="${APP_DIR:-/var/www/open-calls}"
+APP_DIR="$(cd "$(dirname "$0")/.." && pwd -P)"
 APP_USER="${APP_USER:-opencalls}"
 SOCKET=/run/opencalls/gunicorn.sock   # systemd RuntimeDirectory (see opencalls.service)
 URL_PREFIX="${URL_PREFIX:-/open-calls}"
@@ -22,14 +24,15 @@ die()  { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "run as root (sudo)"
 
-# One deploy at a time; never leave the uploaded .env (it holds credentials) lying around.
+# One deploy at a time
 exec 9>/run/opencalls-deploy.lock
 flock -n 9 || die "another deploy is running"
-trap '[[ -n "$ENV_FILE" ]] && rm -f "$ENV_FILE"' EXIT
 BACKUP_DIR=/var/backups/opencalls-nginx   # outside /etc/nginx so backups are never loaded as config
 mkdir -p "$BACKUP_DIR"
 command -v nginx >/dev/null || die "nginx not found"
-command -v rsync >/dev/null || die "rsync not found (apt install rsync)"
+[[ -f "$APP_DIR/wsgi.py" && -d "$APP_DIR/app" ]] || die "$APP_DIR does not look like the open-calls repository"
+OWNER="$(stat -c %U "$APP_DIR")"
+[[ "$OWNER" != root ]] || warn "$APP_DIR belongs to root — better: sudo chown -R <you>: $APP_DIR (so you can git pull without sudo)"
 
 # ---- Python >= 3.10 (anthropic SDK 1.x requirement)
 PY="${PYTHON:-python3}"
@@ -37,57 +40,56 @@ PY="${PYTHON:-python3}"
   || die "$PY is older than 3.10 — install a newer Python (e.g. apt install python3.12 python3.12-venv) and set PYTHON=python3.12"
 "$PY" -m venv --help >/dev/null 2>&1 || die "python venv module missing (apt install python3-venv)"
 
-# ---- service user and files
+# ---- service user
 if ! id "$APP_USER" >/dev/null 2>&1; then
   log "creating system user $APP_USER"
-  useradd --system --home-dir "$APP_DIR" --shell /usr/sbin/nologin "$APP_USER"
+  useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin "$APP_USER"
 fi
-mkdir -p "$APP_DIR"
-log "syncing code to $APP_DIR"
-rsync -a --delete \
-  --exclude '.env' --exclude 'instance/' --exclude '.venv/' --exclude '.cache/' --exclude '__pycache__/' \
-  "$RELEASE_DIR"/ "$APP_DIR"/
+cd "$APP_DIR"
+as_owner() { sudo -u "$OWNER" -H "$@"; }
+as_app()   { sudo -u "$APP_USER" env HOME=/tmp FLASK_APP=wsgi.py "$@"; }
 
-# ---- .env: the uploaded developer .env + production overrides.
-# Values that differ between your computer and the server are forced here, so one .env serves both.
-# SECRET_KEY stays server-only: kept from the previous install, or generated on the first one.
-OVERRIDES="DEV_LOGIN APP_PREFIX PUBLIC_BASE_URL PREFERRED_URL_SCHEME SESSION_COOKIE_SECURE SECRET_KEY DEPLOY_SSH"
-if [[ -n "$ENV_FILE" ]]; then
-  log "installing .env (with production overrides)"
-  secret=""
-  [[ -f "$APP_DIR/.env" ]] && secret=$(grep -E '^SECRET_KEY=' "$APP_DIR/.env" | tail -n1 | cut -d= -f2- || true)
-  [[ -n "$secret" ]] || secret=$("$PY" -c 'import secrets; print(secrets.token_urlsafe(48))')
-  tmp=$(mktemp)
-  {
-    grep -vE "^($(echo $OVERRIDES | tr ' ' '|'))=" "$ENV_FILE" || true
-    echo
-    echo "# ---- production values, set by deploy/remote-install.sh (edits above this line are yours)"
-    echo "DEV_LOGIN=0"
-    echo "APP_PREFIX=$URL_PREFIX"
-    echo "PUBLIC_BASE_URL=https://$DOMAIN$URL_PREFIX"
-    echo "PREFERRED_URL_SCHEME=https"
-    echo "SESSION_COOKIE_SECURE=1"
-    echo "SECRET_KEY=$secret"
-  } > "$tmp"
-  install -m 600 -o "$APP_USER" -g "$APP_USER" "$tmp" "$APP_DIR/.env"
-  rm -f "$tmp" "$ENV_FILE"
+# ---- .env: kept in the clone (git-ignored). Production values are enforced, everything else is yours.
+if [[ ! -f .env ]]; then
+  warn "no .env — creating one from .env.example; fill in the credentials (MS_*, MAILERLITE_*, ANTHROPIC_API_KEY) and run this again"
+  install -m 640 -o "$OWNER" -g "$APP_USER" .env.example .env
 fi
-[[ -f "$APP_DIR/.env" ]] || die "$APP_DIR/.env is missing — run deploy.sh from a folder that has a .env"
+set_env() {   # set_env KEY VALUE — replace the line if present, append otherwise
+  local key="$1" val="$2"
+  if grep -qE "^$key=" .env; then
+    [[ "$(grep -E "^$key=" .env | tail -n1 | cut -d= -f2-)" == "$val" ]] && return 0
+    local t; t=$(mktemp)
+    awk -v k="$key" -v v="$val" 'index($0, k "=") == 1 { print k "=" v; next } { print }' .env > "$t"
+    cat "$t" > .env; rm -f "$t"      # cat keeps the file's owner and mode
+  else
+    printf '%s=%s\n' "$key" "$val" >> .env
+  fi
+  log ".env: $key set for production"
+}
+set_env DEV_LOGIN 0
+set_env APP_PREFIX "$URL_PREFIX"
+set_env PUBLIC_BASE_URL "https://$DOMAIN$URL_PREFIX"
+set_env PREFERRED_URL_SCHEME https
+set_env SESSION_COOKIE_SECURE 1
+secret=$(grep -E '^SECRET_KEY=' .env | tail -n1 | cut -d= -f2- || true)
+if [[ ${#secret} -lt 32 || "$secret" == change-me* || "$secret" == dev-change-me* ]]; then
+  set_env SECRET_KEY "$("$PY" -c 'import secrets; print(secrets.token_urlsafe(48))')"
+fi
 
-mkdir -p "$APP_DIR/instance"
-chown -R "$APP_USER:$APP_USER" "$APP_DIR"
-# nginx (www-data) serves static files directly: directories must be traversable
-chmod 755 "$APP_DIR" "$APP_DIR/app"
-find "$APP_DIR/app/static" -type d -exec chmod 755 {} + ; find "$APP_DIR/app/static" -type f -exec chmod 644 {} +
-chmod 700 "$APP_DIR/instance"
+# ---- permissions (see header): code readable by everyone incl. nginx; .env and instance/ private
+find "$APP_DIR" \( -path "$APP_DIR/instance" -o -path "$APP_DIR/.env" -o -path "$APP_DIR/.git" \) -prune \
+     -o -exec chmod a+rX {} +
+chown "$OWNER:$APP_USER" .env && chmod 640 .env
+mkdir -p instance
+chown -R "$APP_USER:$APP_USER" instance && chmod 750 instance
 
 # ---- virtualenv, dependencies, database
-as_app() { sudo -u "$APP_USER" -H env FLASK_APP=wsgi.py "$@"; }
-cd "$APP_DIR"
-[[ -x .venv/bin/python ]] || { log "creating virtualenv"; as_app "$PY" -m venv .venv; }
+# the virtualenv belongs to the code owner; the service only reads/executes it
+[[ -x .venv/bin/python ]] || { log "creating virtualenv"; as_owner "$PY" -m venv .venv; }
 log "installing Python dependencies"
-as_app .venv/bin/pip install -q --upgrade pip
-as_app .venv/bin/pip install -q -r requirements.txt
+as_owner .venv/bin/pip install -q --upgrade pip
+as_owner .venv/bin/pip install -q -r requirements.txt
+chmod -R a+rX .venv
 log "migrating database"
 as_app .venv/bin/flask db upgrade
 # Seed the curated list exactly once (a marker, so an emptied database is never re-seeded)

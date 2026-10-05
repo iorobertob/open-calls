@@ -21,6 +21,9 @@ SYSTEM = """You translate content for the open-calls website of the Music Innova
 (MISC) of the Lithuanian Academy of Music and Theatre. Translate between Lithuanian and English.
 Keep names of organisations, festivals, conferences, programmes, currencies and dates unchanged.
 Use natural, concise academic/arts-administration language. Do not add or drop information.
+Organisation names: keep proper names, translate generic parts (e.g. "Oldenburgo universitetas" →
+"University of Oldenburg"). If a text is already in the target language or is only a name, URL or
+code, return it unchanged.
 Return one item per requested field: `id` of the entry, the target `field` name and the translated `text`."""
 
 
@@ -73,6 +76,18 @@ def translate_batch(calls):
         n += 1
     db.session.commit()
     return n
+
+
+def translate_call(call):
+    """Fill the missing language of one saved entry (called after every save). Never raises."""
+    if not llm_available() or not call.id or not call.missing_translations():
+        return 0
+    try:
+        return translate_batch([call])
+    except Exception:
+        db.session.rollback()
+        log.exception("translation of #%s failed", call.id)
+        return 0
 
 
 def translate_missing(limit=None, progress=None):

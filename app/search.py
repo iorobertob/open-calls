@@ -17,7 +17,7 @@ SHOW = {  # "show" filter -> phases included
     "rejected": {"rejected"},
     "all": {"due_today", "closing_soon", "open", "rolling", "upcoming", "closed", "rejected"},
 }
-TEXT_COLUMNS = [Call.title_en, Call.title_lt, Call.org, Call.desc_en, Call.desc_lt, Call.kam_tinka,
+TEXT_COLUMNS = [Call.title_en, Call.title_lt, Call.org, Call.org_en, Call.desc_en, Call.desc_lt, Call.kam_tinka,
                 Call.nauda, Call.note, Call.city_en, Call.city_lt, Call.country_en, Call.country_lt, Call.url]
 
 

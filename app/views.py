@@ -9,6 +9,7 @@ from flask_login import current_user, login_required
 from werkzeug.datastructures import MultiDict
 
 from .auth import safe_next
+from .duplicates import find_duplicates
 from .extract import extract_url
 from .i18n import get_lang, tr
 from .ics import ics_response
@@ -140,24 +141,27 @@ def suggest():
         db.session.flush()
         comment = (request.form.get("comment") or "").strip()
         c.needs_review = True
+        dups = find_duplicates(url, [c.title_en, c.title_lt])
         c.review_reason = "\n".join(x for x in [msg("user_suggestion", email=current_user.email),
+                                                  *[msg("possible_duplicate_" + r, id=str(d.id)) for d, r in dups[:5]],
                                                   msg("comment", text=comment) if comment else "",
                                                   data.get("review", "")] if x)
         db.session.add(CallChange(call_id=c.id, origin="suggestion", user_id=current_user.id, note=comment))
         db.session.commit()
+        from .translate import translate_call
+        translate_call(c)
         flash(tr("Thank you — the suggestion was sent for review."), "ok")
         return redirect(url_for(".index"))
     return render_template("suggest.html")
 
 
 def to_record(data):
-    """Map Extraction field names to the curator JSON schema used by importer.apply_record."""
-    m = {"title_en": "titleEn", "title_lt": "titleLt", "city_en": "cityEn", "city_lt": "cityLt",
-         "country_en": "countryEn", "country_lt": "countryLt", "country_code": "countryCode",
-         "deadline_word_en": "deadlineWordEn", "deadline_word_lt": "deadlineWordLt", "desc_en": "descEn",
-         "desc_lt": "descLt", "kam_tinka": "kamTinka", "studentu_nuolaida": "studentuNuolaida",
-         "event_start": "eventStart", "event_end": "eventEnd"}
-    rec = {m.get(k, k): v for k, v in data.items() if k not in ("is_call", "confidence")}
+    """Map extraction / model attribute names (snake_case) to the curator JSON schema used by
+    importer.apply_record. Derived from the importer's own field map, so every field — including
+    all English (_en) versions — is carried over."""
+    from .importer import DATE_FIELDS, FIELD_MAP
+    to_json = {attr: key for key, attr in {**FIELD_MAP, **DATE_FIELDS}.items()}
+    rec = {to_json.get(k, k): v for k, v in data.items() if k not in ("is_call", "confidence")}
     if rec.get("status") == "closed":
         rec["status"] = "reject"
     return rec

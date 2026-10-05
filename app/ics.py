@@ -33,7 +33,7 @@ def build_calendar(calls, lang="lt", name=None):
     stamp = datetime.now(timezone.utc)
     for c in calls:
         link = url_for("main.detail", call_id=c.id, _external=True)
-        body = "\n\n".join(x for x in [c.desc(lang), c.org, f"{tr('Official page', lang)}: {c.url}", f"MISC: {link}"] if x)
+        body = "\n\n".join(x for x in [c.desc(lang), c.org_name(lang), f"{tr('Official page', lang)}: {c.url}", f"MISC: {link}"] if x)
         if c.deadline:
             ev = Event()
             ev.add("uid", f"call-{c.id}-deadline@{domain}")

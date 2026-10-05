@@ -1,6 +1,8 @@
 # /etc/systemd/system/opencalls.service (rendered by remote-install.sh)
 # Gunicorn on a unix socket (no TCP port — nothing to collide with the other apps on this server).
 # Group www-data + RuntimeDirectory: nginx can reach the socket, nobody else can.
+# SupplementaryGroups: read .env (owner: you, group: opencalls, mode 640). The code is owned by you
+# and only readable here, so the app cannot modify itself; it writes only to instance/.
 [Unit]
 Description=MISC open calls (gunicorn)
 After=network.target
@@ -8,6 +10,10 @@ After=network.target
 [Service]
 User=__APP_USER__
 Group=www-data
+SupplementaryGroups=__APP_USER__
+Environment=PYTHONDONTWRITEBYTECODE=1
+# private home in the runtime dir (gunicorn keeps its control socket under $HOME/.gunicorn)
+Environment=HOME=/run/opencalls
 WorkingDirectory=__APP_DIR__
 EnvironmentFile=__APP_DIR__/.env
 RuntimeDirectory=opencalls

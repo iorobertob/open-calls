@@ -46,6 +46,9 @@ def register(app):
         from .messages import msg
         from .views import to_record
         data, _, used = extract_url(url)
+        from .duplicates import find_duplicates
+        for d, why in find_duplicates(url, [data.get("title_en", ""), data.get("title_lt", "")]):
+            click.echo(f"  ! possible duplicate ({why}): #{d.id} [{d.status}] {d.title_en or d.title_lt}")
         c = Call(first_seen=date.today().isoformat(), source="CLI add-url", url=url, needs_review=True,
                  review_reason=msg("added_cli"))
         apply_record(c, to_record(data))
@@ -53,6 +56,8 @@ def register(app):
             c.status = status
         db.session.add(c)
         db.session.commit()
+        from .translate import translate_call
+        translate_call(c)
         click.echo(f"#{c.id} [{c.status}] {c.title_en} — deadline {c.deadline} (Claude: {used})")
 
     @app.cli.command("translate")

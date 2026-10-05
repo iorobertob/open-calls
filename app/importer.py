@@ -7,7 +7,7 @@ import json
 import re
 from datetime import date
 
-from .models import DETAIL_FIELDS, Call, CallChange, db
+from .models import SINGLE_PAIRS, Call, CallChange, db
 
 FIELD_MAP = {  # JSON key -> model attribute
     "status": "status", "verified": "verified", "kind": "kind", "star": "star",
@@ -22,7 +22,7 @@ FIELD_MAP = {  # JSON key -> model attribute
 FIELD_MAP.update({  # English detail fields (exported by this app; absent in the curator's weekly file)
     "kamTinkaEn": "kam_tinka_en", "naudaEn": "nauda_en", "mokestisEn": "mokestis_en", "amziusEn": "amzius_en",
     "padengiamaEn": "padengiama_en", "nuotoliuEn": "nuotoliu_en", "registracijaEn": "registracija_en",
-    "studentuNuolaidaEn": "studentu_nuolaida_en", "noteEn": "note_en",
+    "studentuNuolaidaEn": "studentu_nuolaida_en", "noteEn": "note_en", "orgEn": "org_en", "sourceEn": "source_en",
 })
 DATE_FIELDS = {"deadline": "deadline", "expires": "expires", "eventStart": "event_start", "eventEnd": "event_end"}
 
@@ -100,7 +100,7 @@ def apply_record(call, rec, origin="import", overwrite=True):
     # so the refresh job / `flask translate` fills it again.
     for attr, _, _ in list(changed):
         en = attr + "_en"
-        if attr in DETAIL_FIELDS and hasattr(call, en) and not any(a == en for a, _, _ in changed) and getattr(call, en):
+        if attr in SINGLE_PAIRS and hasattr(call, en) and not any(a == en for a, _, _ in changed) and getattr(call, en):
             changed.append((en, getattr(call, en), ""))
             setattr(call, en, "")
     if "topics" in rec:

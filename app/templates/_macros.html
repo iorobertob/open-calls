@@ -36,7 +36,7 @@
       {% if not c.verified %}<span class="unver" title="{{ _('Not verified — open manually') }}">?</span>{% endif %}
     </div>
     <h3><a href="{{ url_for('main.detail', call_id=c.id) }}">{{ c.title(lang) }}</a></h3>
-    <div class="org">{{ c.country_code|flag }} {{ c.org }}{% if c.city(lang) %} · {{ c.city(lang) }}{% endif %}{% if c.country(lang) %}, {{ c.country(lang) }}{% endif %}</div>
+    <div class="org">{{ c.country_code|flag }} {{ c.org_name(lang) }}{% if c.city(lang) %} · {{ c.city(lang) }}{% endif %}{% if c.country(lang) %}, {{ c.country(lang) }}{% endif %}</div>
     {% if c.desc(lang) %}<p class="desc">{{ c.desc(lang) }}</p>{% endif %}
     <div class="topics">
       {% for t in c.topic_list %}<a class="topic fam-{{ TOPICS.get(t, ('ctx',))[0] }}" href="{{ url_for('main.index', topic=t) }}">{{ topic_label(t, lang) }}</a>{% endfor %}

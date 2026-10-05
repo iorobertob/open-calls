@@ -4,12 +4,14 @@ from flask import Blueprint, abort, flash, redirect, render_template, request, u
 from flask_login import current_user, login_required
 
 from .auth import safe_next
+from .duplicates import find_duplicates
 from .extract import extract_url, llm_available
 from .i18n import get_lang, tr
 from .importer import apply_record, import_payload, load_payload, parse_date
-from .models import DETAIL_FIELDS, STATUSES, Call, CallChange, RefreshRun, User, db, today
+from .models import PAIR_FIELDS, SINGLE_PAIRS, STATUSES, Call, CallChange, RefreshRun, User, db, today
 from .refresh import check_call, run_refresh
 from .translate import pending as pending_translations
+from .translate import translate_call
 from .messages import msg
 from .messages import render as render_msg
 from .views import to_record
@@ -20,7 +22,7 @@ TEXT_FIELDS = ["title_lt", "title_en", "org", "city_lt", "city_en", "country_lt"
                "deadline_word_lt", "deadline_word_en", "url", "desc_lt", "desc_en", "kam_tinka", "nauda",
                "mokestis", "amzius", "padengiama", "nuotoliu", "registracija", "studentu_nuolaida", "note",
                "source", "source_url", "first_seen", "last_verified",
-               *[f + "_en" for f in DETAIL_FIELDS]]
+               *[f + "_en" for f in SINGLE_PAIRS]]
 DATE_FIELDS = ["deadline", "expires", "event_start", "event_end"]
 
 
@@ -72,6 +74,13 @@ def _form_to_call(call):
         if getattr(call, f) != val:
             changes.append((f, getattr(call, f), val))
             setattr(call, f, val)
+    # One language edited, the other not: the other side is now outdated — clear it so it is re-translated.
+    changed = {f for f, _, _ in changes}
+    for a, b in [(f + "_lt", f + "_en") for f in PAIR_FIELDS] + [(f, f + "_en") for f in SINGLE_PAIRS]:
+        for edited, other in ((a, b), (b, a)):
+            if edited in changed and other not in changed and getattr(call, edited) and getattr(call, other):
+                changes.append((other, getattr(call, other), ""))
+                setattr(call, other, "")
     topics = request.form.getlist("topics")
     if topics != call.topic_list:
         changes.append(("topics", ",".join(call.topic_list), ",".join(topics)))
@@ -89,10 +98,16 @@ def new():
         if not (call.title_en or call.title_lt):
             flash(tr("A title is required."), "error")
             return render_template("admin/form.html", c=call)
+        dups = find_duplicates(call.url, [call.title_en, call.title_lt])
+        if dups and request.form.get("not_duplicate") != "on":
+            flash(tr("This may already be in the database. Check the entries below; to save anyway, tick "
+                     "“It is a different call” and save again."), "error")
+            return render_template("admin/form.html", c=call, duplicates=dups)
         db.session.add(call)
         db.session.flush()
         db.session.add(CallChange(call_id=call.id, origin="admin", user_id=current_user.id, note=msg("created")))
         db.session.commit()
+        translate_call(call)   # fill whichever language was left empty
         flash(tr("Saved."), "ok")
         return redirect(url_for("main.detail", call_id=call.id))
     return render_template("admin/form.html", c=call)
@@ -103,9 +118,6 @@ def new():
 def import_url():
     """Fetch a link, extract its fields and show the pre-filled form for review before saving."""
     url = (request.form.get("url") or "").strip()
-    dup = Call.query.filter_by(url=url).first()
-    if dup:
-        flash(tr("Already in the database:") + f" #{dup.id} {dup.title(get_lang())}", "error")
     data, page, used_llm = extract_url(url, request.form.get("page_text", ""))
     call = Call(status="open", first_seen=today().isoformat(), last_verified=today().isoformat(), verified=used_llm,
                 source=msg("admin_link"), url=url)
@@ -127,7 +139,8 @@ def import_url():
         flash(tr("Claude declined to read this page — basic extraction only."), "error")
     if data.get("is_call") is False:
         flash(tr("The page does not look like an open call."), "error")
-    return render_template("admin/form.html", c=call, extracted=True)
+    dups = find_duplicates(call.url or url, [call.title_en, call.title_lt])
+    return render_template("admin/form.html", c=call, extracted=True, duplicates=dups)
 
 
 @bp.route("/call/<int:call_id>/edit", methods=["GET", "POST"])
@@ -141,6 +154,7 @@ def edit(call_id):
         if request.form.get("clear_review") == "on":
             call.needs_review, call.review_reason = False, ""
         db.session.commit()
+        translate_call(call)
         flash(tr("Saved."), "ok")
         return redirect(url_for("main.detail", call_id=call.id))
     return render_template("admin/form.html", c=call)

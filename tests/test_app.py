@@ -157,3 +157,53 @@ def test_add_by_link_with_pasted_text(app):
     html = r.get_data(as_text=True)
     assert 'name="deadline" value="2027-03-01"' in html
     assert "ANTHROPIC_API_KEY is not set" in html   # tells the admin exactly why AI was not used
+
+
+def test_extraction_keeps_both_languages(app):
+    from app.importer import apply_record
+    from app.models import SINGLE_PAIRS
+    from app.views import to_record
+    data = {f: f"LT {f}" for f in SINGLE_PAIRS} | {f + "_en": f"EN {f}" for f in SINGLE_PAIRS}
+    c = Call()
+    apply_record(c, to_record(data))
+    assert all(getattr(c, f) and getattr(c, f + "_en") for f in SINGLE_PAIRS)
+
+
+def test_duplicate_detection(app):
+    from app.duplicates import find_duplicates, norm_url
+    assert norm_url("http://www.Example.org/cfp/?utm_source=x#top") == norm_url("https://example.org/cfp")
+    assert [r for _, r in find_duplicates("https://www.a.example/")] == ["link"]
+    assert [r for _, r in find_duplicates("https://other.example", ["Soon conf."])] == ["title"]
+    assert find_duplicates("https://other.example", ["Something unrelated"]) == []
+
+
+def test_admin_new_warns_about_duplicates(app):
+    c = app.test_client()
+    login(c)
+    form = {"title_en": "Soon conf", "url": "https://a.example", "status": "open", "kind": "conference"}
+    r = c.post("/admin/new", data=form)
+    assert r.status_code == 200 and "Soon conf" in r.get_data(as_text=True)   # form shown again, not saved
+    assert Call.query.count() == 4
+    r = c.post("/admin/new", data=form | {"not_duplicate": "on"})
+    assert r.status_code == 302 and Call.query.count() == 5
+
+
+def test_editing_one_language_clears_stale_translation(app):
+    c = app.test_client()
+    login(c)
+    call = db.session.get(Call, 2)
+    call.nauda, call.nauda_en = "Sena nauda", "Old benefit"
+    db.session.commit()
+    form = {f: getattr(call, f) or "" for f in ("title_en", "url", "status", "kind")} | {
+        "nauda": "Nauja nauda", "nauda_en": "Old benefit"}
+    c.post("/admin/call/2/edit", data=form)
+    db.session.refresh(call)
+    assert call.nauda == "Nauja nauda" and call.nauda_en == ""   # cleared → re-translated (needs the API key)
+
+
+def test_organiser_language_fallback(app):
+    call = Call(org="Oldenburgo universitetas", org_en="")
+    assert call.org_name("en") == "Oldenburgo universitetas"
+    call.org_en = "University of Oldenburg"
+    assert call.org_name("en") == "University of Oldenburg" and call.org_name("lt") == "Oldenburgo universitetas"
+    assert ("org", "org_en") not in call.missing_translations()

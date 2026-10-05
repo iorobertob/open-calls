@@ -13,6 +13,19 @@
 <h1>{{ (_("Edit") ~ ' #' ~ c.id) if c.id else _("New call") }}</h1>
 {% if extracted %}<div class="flash ok">{{ _("Fields were read automatically from the page — please check them before saving.") }}</div>{% endif %}
 {% if c.review_reason %}<pre class="reason">{{ c.review_reason|sysmsg }}</pre>{% endif %}
+{% if duplicates %}
+<section class="panel dupes">
+  <h2>{{ _("Possibly already in the database") }} ({{ duplicates|length }})</h2>
+  <ul class="plain">
+  {% for d, why in duplicates %}
+    <li><a href="{{ url_for('main.detail', call_id=d.id) }}" target="_blank" rel="noopener">#{{ d.id }} {{ d.title(lang) }}</a>
+      <small>— {{ _("same link") if why == 'link' else _("similar title") }} · {{ d.deadline or d.deadline_word(lang) or '—' }} · {{ _({'open': 'Open', 'watch': 'Opens soon', 'reject': 'Not eligible', 'pending': 'Pending review', 'archived': 'Archived'}[d.status]) }}</small>
+      · <a href="{{ url_for('admin.edit', call_id=d.id) }}">{{ _("Edit") }}</a></li>
+  {% endfor %}
+  </ul>
+  <p class="hint">{{ _("If it is the same call, edit the existing entry instead. Several calls can share one page — then save this one too.") }}</p>
+</section>
+{% endif %}
 <form method="post" action="{{ url_for('admin.edit', call_id=c.id) if c.id else url_for('admin.new') }}" class="editform">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <fieldset><legend>{{ _("Basics") }}</legend>
@@ -22,7 +35,7 @@
     <label class="inline"><input type="checkbox" name="verified" {{ 'checked' if c.verified }}> {{ _("Verified on the organiser's page") }}</label>
     {{ field('url', 'Official page', 'url', True) }}
     {{ field('title_lt', 'Title (LT)', wide=True) }} {{ field('title_en', 'Title (EN)', wide=True) }}
-    {{ field('org', 'Organiser', wide=True) }}
+    {{ field('org', 'Organiser (LT)', wide=True) }} {{ field('org_en', 'Organiser (EN)', wide=True) }}
   </fieldset>
   <fieldset><legend>{{ _("Dates") }}</legend>
     {{ field('deadline', 'Deadline', 'date') }} {{ field('expires', 'Valid until (if no deadline)', 'date') }}
@@ -47,11 +60,13 @@
     {{ pair('note', 'Note', 3) }}
   </fieldset>
   <fieldset><legend>{{ _("Provenance") }}</legend>
-    <label>{{ _("Found via") }}<input type="text" name="source" value="{{ c.source|sysmsg }}"></label>
+    <label>{{ _("Found via") }} (LT)<input type="text" name="source" value="{{ c.source|sysmsg }}"></label>
+    <label>{{ _("Found via") }} (EN)<input type="text" name="source_en" value="{{ c.source_en or '' }}"></label>
     {{ field('source_url', 'Source URL', 'url') }}
     {{ field('first_seen', 'First seen') }} {{ field('last_verified', 'Last verified') }}
   </fieldset>
   <div class="acts">
+    {% if duplicates and not c.id %}<label class="inline"><input type="checkbox" name="not_duplicate"> {{ _("It is a different call") }}</label>{% endif %}
     {% if c.id and c.needs_review %}<label class="inline"><input type="checkbox" name="clear_review" checked> {{ _("Mark reviewed") }}</label>{% endif %}
     <button class="btn primary">{{ _("Save") }}</button>
     <a class="btn ghost" href="{{ url_for('admin.dashboard') }}">{{ _("Cancel") }}</a>

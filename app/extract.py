@@ -14,10 +14,10 @@ from typing import List, Literal
 import requests
 from bs4 import BeautifulSoup
 from flask import current_app
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 
 from .messages import msg
-from .taxonomy import KINDS, TOPICS
+from .taxonomy import KINDS, tax
 
 log = logging.getLogger(__name__)
 
@@ -89,7 +89,6 @@ def fetch(url, timeout=25):
 
 
 KindLit = Literal[tuple(KINDS)]
-TopicLit = Literal[tuple(TOPICS)]
 
 
 class Extraction(BaseModel):
@@ -116,7 +115,8 @@ class Extraction(BaseModel):
     event_end: str = Field(description="Event/residency end YYYY-MM-DD or empty")
     desc_en: str = Field(description="1–2 sentences, max 165 characters")
     desc_lt: str = Field(description="Same in Lithuanian, max 165 characters")
-    topics: List[TopicLit] = Field(description="2–4 topic keys")
+    topics: List[str] = Field(description="2–4 sub-discipline keys from the taxonomy")
+    fields: List[str] = Field(description="1–2 field keys: every field the call is meant for")
     kam_tinka: str = Field(description="LT: who is eligible; state restrictions (nationality, age, residency, degree level) explicitly")
     nauda: str = Field(description="LT: concrete benefit for an LMTA student/researcher")
     mokestis: str = Field(description="LT: application/participation fee, or 'Nemokama' / 'Nenurodyta'")
@@ -190,6 +190,27 @@ def llm_available():
     return bool(current_app.config.get("ANTHROPIC_API_KEY"))
 
 
+def extraction_model():
+    """Extraction with the CURRENT taxonomy as enums (admins can edit fields / sub-disciplines)."""
+    t = tax()
+    topics = tuple(d.key for d in t.disciplines) or ("research",)
+    fields = tuple(f.key for f in t.fields) or ("music",)
+    return create_model("Extraction", __base__=Extraction,
+                        topics=(List[Literal[topics]], Field(description="2–4 sub-discipline keys from the taxonomy")),
+                        fields=(List[Literal[fields]], Field(description="1–2 field keys: every field the call is meant for")))
+
+
+def taxonomy_brief():
+    """The tree as text for the prompt: keys with names, grouped field → category."""
+    t = tax()
+    lines = ["Taxonomy (choose keys): fields → categories → sub-disciplines."]
+    for f, cats in t.grouped():
+        lines.append(f"FIELD {f.key} = {f.name_en}" if f else "SHARED (any field):")
+        for c, discs in cats:
+            lines.append(f"  {c.name_en}: " + ", ".join(f"{d.key} ({d.name_en})" for d in discs))
+    return "\n".join(lines)
+
+
 def extract_with_claude(page: Page, previous: dict | None = None) -> Extraction | None:
     today = date.today().isoformat()
     parts = [f"Today is {today}.", f"URL: {page.final_url or page.url}", f"Page title: {page.title}"]
@@ -201,13 +222,14 @@ def extract_with_claude(page: Page, previous: dict | None = None) -> Extraction 
         parts.append("The entry is already in the database with these values; re-check them against the "
                      "page and report the current state (keep fields the page does not contradict):\n"
                      + json.dumps(previous, ensure_ascii=False))
+    parts.append(taxonomy_brief())
     parts.append(f"Page text:\n{page.text}")
     kwargs = dict(
         model=current_app.config["CLAUDE_MODEL"],
         max_tokens=16000,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": "\n\n".join(parts)}],
-        output_format=Extraction,
+        output_format=extraction_model(),
         output_config={"effort": current_app.config["CLAUDE_EFFORT"]},
     )
     resp = parse_with_fallback(**kwargs)

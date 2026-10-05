@@ -191,10 +191,10 @@ def series_name_from(call, lang):
 def scan_series(series, page):
     """Ask Claude which calls on the series page are not in our list yet; create them as pending entries.
     Returns the new Call objects."""
-    from .extract import Extraction, parse_with_fallback, SYSTEM_PROMPT
+    from pydantic import create_model
 
-    class Scan(BaseModel):
-        new_calls: List[Extraction]
+    from .extract import SYSTEM_PROMPT, extraction_model, parse_with_fallback, taxonomy_brief
+    Scan = create_model("Scan", new_calls=(List[extraction_model()], ...))
 
     known = [{"title": c.title_en or c.title_lt, "deadline": c.deadline.isoformat() if c.deadline else "",
               "url": c.url} for c in calls_of(series) if not c.is_placeholder]
@@ -204,7 +204,7 @@ def scan_series(series, page):
               "announced with a future deadline or opening date (new editions, new themes / special issues, "
               "new tracks). Return an empty list if there is nothing new. For each, fill every field; use the "
               "most specific URL for that call (the page URL if there is no better one).\n\n"
-              f"Page title: {page.title}\nPage text:\n{page.text}")
+              f"{taxonomy_brief()}\n\nPage title: {page.title}\nPage text:\n{page.text}")
     resp = parse_with_fallback(model=current_app.config["CLAUDE_MODEL"], max_tokens=16000, system=SYSTEM_PROMPT,
                                output_config={"effort": current_app.config["CLAUDE_EFFORT"]}, output_format=Scan,
                                messages=[{"role": "user", "content": prompt}])

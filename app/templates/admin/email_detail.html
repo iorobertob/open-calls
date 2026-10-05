@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ e.subject }}{% endblock %}
+{% block content %}
+<p class="back"><a href="{{ url_for('admin.emails') }}">← {{ _("E-mails") }}</a></p>
+<section class="panel">
+  <h1 style="font-size:22px">{{ e.subject }}</h1>
+  <dl class="facts">
+    <dt>{{ _("When") }}</dt><dd>{{ e.at.strftime('%Y-%m-%d %H:%M:%S') }} UTC</dd>
+    <dt>{{ _("To") }}</dt><dd>{{ e.to }}</dd>
+    <dt>{{ _("Status") }}</dt><dd><span class="badge st-{{ e.status }}">{{ e.status }}</span></dd>
+    {% if e.error %}<dt>{{ _("Error") }}</dt><dd class="err">{{ e.error }}</dd>{% endif %}
+  </dl>
+  {% if e.body %}<h2 style="margin-top:18px">{{ _("Text version") }}</h2><pre class="mailbody">{{ e.body }}</pre>{% endif %}
+</section>
+{% endblock %}

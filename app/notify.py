@@ -21,7 +21,7 @@ from itsdangerous import BadSignature, URLSafeSerializer
 
 from .i18n import tr
 from .messages import render as render_msg
-from .models import Call, Notification, ReminderSent, Subscription, User, db, today, utcnow
+from .models import Call, EmailLog, Notification, ReminderSent, Subscription, User, db, today, utcnow
 
 log = logging.getLogger(__name__)
 
@@ -31,23 +31,32 @@ log = logging.getLogger(__name__)
 class Mailer:
     """One SMTP connection for a whole run (or the log when SMTP is not configured)."""
 
-    def __init__(self):
+    def __init__(self, kind="other"):
         cfg = current_app.config
         self.console = cfg["MAIL_BACKEND"] != "smtp"
         self.cfg = cfg
         self.conn = None
+        self.kind = kind
 
     def __enter__(self):
         if not self.console:
             c = self.cfg
-            if c["SMTP_PORT"] == 465:
-                self.conn = smtplib.SMTP_SSL(c["SMTP_HOST"], c["SMTP_PORT"], timeout=30)
-            else:
-                self.conn = smtplib.SMTP(c["SMTP_HOST"], c["SMTP_PORT"], timeout=30)
-                if c["SMTP_STARTTLS"]:
-                    self.conn.starttls()
-            if c["SMTP_USERNAME"]:
-                self.conn.login(c["SMTP_USERNAME"], c["SMTP_PASSWORD"])
+            try:
+                if c["SMTP_PORT"] == 465:
+                    self.conn = smtplib.SMTP_SSL(c["SMTP_HOST"], c["SMTP_PORT"], timeout=30)
+                else:
+                    self.conn = smtplib.SMTP(c["SMTP_HOST"], c["SMTP_PORT"], timeout=30)
+                    if c["SMTP_STARTTLS"]:
+                        self.conn.starttls()
+                if c["SMTP_USERNAME"]:
+                    self.conn.login(c["SMTP_USERNAME"], c["SMTP_PASSWORD"])
+            except (smtplib.SMTPException, OSError) as e:
+                # nothing could be sent at all: record it so it shows up in Admin -> E-mails
+                db.session.add(EmailLog(to=f"(SMTP {c['SMTP_HOST']}:{c['SMTP_PORT']})",
+                                        subject="Connection to the mail server failed",
+                                        kind=self.kind, status="failed", error=describe_smtp_error(e)))
+                db.session.commit()
+                raise
         return self
 
     def __exit__(self, *exc):
@@ -57,7 +66,10 @@ class Mailer:
             except smtplib.SMTPException:
                 pass
 
-    def send(self, to, subject, text, html, unsubscribe_url=None):
+    def send(self, to, subject, text, html, unsubscribe_url=None, kind=None, user_id=None):
+        entry = EmailLog(to=to, subject=subject[:400], kind=kind or self.kind, body=text[:20000], user_id=user_id,
+                         status="logged" if self.console else "sent")
+        db.session.add(entry)
         m = EmailMessage()
         m["From"] = self.cfg["MAIL_FROM"]
         m["To"] = to
@@ -71,8 +83,26 @@ class Mailer:
         m.add_alternative(html, subtype="html")
         if self.console:
             log.info("EMAIL to %s — %s\n%s", to, subject, text)
-        else:
+            return
+        try:
             self.conn.send_message(m)
+        except (smtplib.SMTPException, OSError) as e:
+            entry.status, entry.error = "failed", describe_smtp_error(e)
+            raise
+
+
+def describe_smtp_error(e):
+    """Readable reason, e.g. '535 Authentication failed' or 'ConnectionRefusedError: ...'."""
+    if isinstance(e, smtplib.SMTPResponseException):
+        msg = e.smtp_error.decode("utf-8", "replace") if isinstance(e.smtp_error, bytes) else str(e.smtp_error)
+        return f"{e.smtp_code} {msg}"[:500]
+    if isinstance(e, smtplib.SMTPRecipientsRefused):
+        parts = []
+        for k, v in e.recipients.items():
+            detail = v[1].decode("utf-8", "replace") if isinstance(v[1], bytes) else str(v[1])
+            parts.append(f"{k}: {v[0]} {detail}")
+        return "; ".join(parts)[:500]
+    return f"{type(e).__name__}: {e}"[:500]
 
 
 # ---------------------------------------------------------------- links & unsubscribe
@@ -164,48 +194,83 @@ def _render(lang, greeting, sections, footer_url, stop):
     return "\n".join(text), "".join(html)
 
 
+# ---------------------------------------------------------------- composing whole e-mails
+
+def compose_user_email(user, ref, rem, news, changed):
+    """(subject, text, html, count) of a user's daily e-mail; count 0 = nothing to send."""
+    lang = user.lang or "lt"
+    rem = sorted(rem, key=lambda c: c.deadline or ref)
+    sections = [
+        (tr("Upcoming deadlines of the calls you follow", lang), [_line(c, lang, ref) for c in rem]),
+        (tr("New calls in series you follow", lang),
+         [_line(n.call, lang, ref, n.call.series.name(lang) if n.call.series else "") for n in news]),
+        (tr("Changes to calls you follow", lang), [_line(n.call, lang, ref, n.detail) for n in changed]),
+    ]
+    count = len(rem) + len(news) + len(changed)
+    if count == 1:
+        only = (rem or [n.call for n in news + changed])[0]
+        kind = tr("Deadline reminder", lang) if rem else (tr("New call", lang) if news else tr("Call updated", lang))
+        subject = f"{kind}: {only.title(lang)}"
+    else:
+        subject = tr("MISC open calls: {0} updates for you", lang).format(count)
+    greeting = tr("Hello", lang) + (f" {user.name.split()[0]}" if user.name else "") + ","
+    text, html = _render(lang, greeting, sections, f"{base_url()}/my", stop_url(user))
+    return subject, text, html, count
+
+
+def compose_admin_digest(lang, calls, user=None):
+    pending = [c for c in calls if c.status == "pending"]
+    review = [c for c in calls if c.status != "pending"]
+
+    def line(c):
+        reason = render_msg((c.review_reason or "").strip().splitlines()[-1] if c.review_reason else "", lang)
+        return {"title": c.title(lang), "when": "", "org": c.org_name(lang), "extra": reason,
+                "url": f"{base_url()}/admin/call/{c.id}/edit"}
+    sections = [(tr("Waiting for approval", lang), [line(c) for c in pending]),
+                (tr("Automatic changes to review", lang), [line(c) for c in review])]
+    subject = tr("MISC open calls — {0} entries to review", lang).format(len(calls))
+    text, html = _render(lang, tr("New entries in the admin queue:", lang), sections, f"{base_url()}/admin/",
+                         stop_url(user) if user else f"{base_url()}/my")
+    return subject, text, html
+
+
+def _outbox():
+    out = defaultdict(list)
+    for n in Notification.query.filter(Notification.sent_at.is_(None)).all():
+        if n.call and n.call.status in ("open", "watch"):
+            out[n.user].append(n)
+        else:
+            n.sent_at = utcnow()   # call gone / unpublished in the meantime: drop silently
+    return out
+
+
+def _split(user, items):
+    news = [n for n in items if n.kind == "series_new" and user.email_series]
+    changed = [n for n in items if n.kind == "call_changed" and user.email_reminders]
+    return news, changed
+
+
 # ---------------------------------------------------------------- daily run
 
 def send_notifications(dry_run=False, ref=None):
     """Returns (users_emailed, admins_emailed, failures)."""
     ref = ref or today()
     reminders = due_reminders(ref)
-    outbox = defaultdict(list)
-    for n in Notification.query.filter(Notification.sent_at.is_(None)).all():
-        if n.call and n.call.status in ("open", "watch"):
-            outbox[n.user].append(n)
-        else:
-            n.sent_at = utcnow()   # call gone / unpublished in the meantime: drop silently
+    outbox = _outbox()
     users = set(reminders) | set(outbox)
     sent = failed = 0
-    with (Mailer() if not dry_run else _DryRun()) as mail:
+    with (Mailer("notifications") if not dry_run else _DryRun()) as mail:
         for user in users:
-            lang = user.lang or "lt"
-            rem = sorted(reminders.get(user, []), key=lambda c: c.deadline)
-            news = [n for n in outbox.get(user, []) if n.kind == "series_new" and user.email_series]
-            changed = [n for n in outbox.get(user, []) if n.kind == "call_changed" and user.email_reminders]
-            sections = [
-                (tr("Upcoming deadlines of the calls you follow", lang), [_line(c, lang, ref) for c in rem]),
-                (tr("New calls in series you follow", lang),
-                 [_line(n.call, lang, ref, n.call.series.name(lang) if n.call.series else "") for n in news]),
-                (tr("Changes to calls you follow", lang), [_line(n.call, lang, ref, n.detail) for n in changed]),
-            ]
-            count = len(rem) + len(news) + len(changed)
+            rem = reminders.get(user, [])
+            news, changed = _split(user, outbox.get(user, []))
+            subject, text, html, count = compose_user_email(user, ref, rem, news, changed)
             if count:
-                if count == 1:
-                    only = (rem or [n.call for n in news + changed])[0]
-                    kind = tr("Deadline reminder", lang) if rem else (
-                        tr("New call", lang) if news else tr("Call updated", lang))
-                    subject = f"{kind}: {only.title(lang)}"
-                else:
-                    subject = tr("MISC open calls: {0} updates for you", lang).format(count)
-                greeting = tr("Hello", lang) + (f" {user.name.split()[0]}" if user.name else "") + ","
-                text, html = _render(lang, greeting, sections, f"{base_url()}/my", stop_url(user))
                 try:
-                    mail.send(user.email, subject, text, html, stop_url(user))
+                    mail.send(user.email, subject, text, html, stop_url(user), user_id=user.id)
                 except (smtplib.SMTPException, OSError) as e:
                     failed += 1
                     log.error("e-mail to %s failed: %s", user.email, e)
+                    db.session.commit()          # keep the failure in the e-mail log
                     continue
                 sent += 1
             if not dry_run:
@@ -229,7 +294,7 @@ class _DryRun:
     def __exit__(self, *exc):
         pass
 
-    def send(self, to, subject, text, html, unsubscribe_url=None):
+    def send(self, to, subject, text, html, unsubscribe_url=None, kind=None, user_id=None):
         log.info("[dry-run] %s — %s\n%s", to, subject, text)
 
 
@@ -240,29 +305,24 @@ def admin_recipients():
     return sorted(emails)
 
 
+def admin_queue(only_new=True):
+    q = Call.query.filter((Call.status == "pending") | (Call.needs_review.is_(True)))
+    if only_new:
+        q = q.filter(Call.admin_notified_at.is_(None))
+    return q.order_by(Call.updated_at.desc()).all()
+
+
 def send_admin_digest(mail):
-    """New pending / needs-review entries since the last digest → one e-mail per admin."""
-    new = Call.query.filter(Call.admin_notified_at.is_(None),
-                            (Call.status == "pending") | (Call.needs_review.is_(True))).all()
+    """New pending / needs-review entries since the last digest -> one e-mail per admin."""
+    new = admin_queue()
     if not new:
         return 0
     n = 0
     for email in admin_recipients():
         user = User.query.filter_by(email=email).first()
-        lang = (user.lang if user else None) or "lt"
-        pending = [c for c in new if c.status == "pending"]
-        review = [c for c in new if c.status != "pending"]
-        def line(c):
-            reason = render_msg((c.review_reason or "").strip().splitlines()[-1] if c.review_reason else "", lang)
-            return {"title": c.title(lang), "when": "", "org": c.org_name(lang), "extra": reason,
-                    "url": f"{base_url()}/admin/call/{c.id}/edit"}
-        sections = [(tr("Waiting for approval", lang), [line(c) for c in pending]),
-                    (tr("Automatic changes to review", lang), [line(c) for c in review])]
-        subject = tr("MISC open calls — {0} entries to review", lang).format(len(new))
-        text, html = _render(lang, tr("New entries in the admin queue:", lang), sections, f"{base_url()}/admin/",
-                             stop_url(user) if user else f"{base_url()}/my")
+        subject, text, html = compose_admin_digest((user.lang if user else None) or "lt", new, user)
         try:
-            mail.send(email, subject, text, html)
+            mail.send(email, subject, text, html, kind="admin_digest", user_id=user.id if user else None)
             n += 1
         except (smtplib.SMTPException, OSError) as e:
             log.error("admin digest to %s failed: %s", email, e)
@@ -271,7 +331,34 @@ def send_admin_digest(mail):
     return n
 
 
-def send_test(to):
-    with Mailer() as mail:
-        mail.send(to, "MISC open calls — test e-mail",
-                  "If you can read this, e-mail sending works.", "<p>If you can read this, e-mail sending works.</p>")
+# ---------------------------------------------------------------- test e-mails (Admin -> E-mails -> Send a test)
+
+def preview_for_user(user, ref=None):
+    """The user's daily e-mail as it would look now, without marking anything as sent. If nothing is
+    due today, their current subscriptions are shown as reminders so the layout can still be checked."""
+    ref = ref or today()
+    rem = due_reminders(ref).get(user, [])
+    pending = [n for n in Notification.query.filter_by(user_id=user.id, sent_at=None).all()
+               if n.call and n.call.status in ("open", "watch")]
+    news, changed = _split(user, pending)
+    if not (rem or news or changed):
+        rem = [s.call for s in user.subscriptions if s.call.status in ("open", "watch") and s.call.deadline
+               and s.call.deadline >= ref][:5]
+    return compose_user_email(user, ref, rem, news, changed)
+
+
+def send_test(to, kind="simple", user=None, lang="en"):
+    """Send one test e-mail. kind: simple | user | admin. Raises on SMTP errors (which are also logged)."""
+    if kind == "user" and user:
+        subject, text, html, _ = preview_for_user(user)
+    elif kind == "admin":
+        subject, text, html = compose_admin_digest(lang, admin_queue(only_new=False))
+    else:
+        subject = tr("MISC open calls — test e-mail", lang)
+        text = tr("If you can read this, e-mail sending works.", lang)
+        html = f"<p>{escape(text)}</p>"
+    with Mailer("test") as mail:
+        try:
+            mail.send(to, "[TEST] " + subject, text, html, kind="test")
+        finally:
+            db.session.commit()

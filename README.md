@@ -8,7 +8,7 @@ The database is seeded with the list the MISC coordinator curated on 2026‑09�
 
 | | |
 |---|---|
-| **Search & filters** | Full‑text search; filter by type, status (open, closing within 14 days, opens soon, closed, not eligible), discipline (38 topics), area (5 topic families), region, country, deadline range, best fit (★), remote participation, free to apply. Filters live in the URL, so any view can be shared as a link. |
+| **Browse & filter** | The home page starts with four **fields**: Music and Sound, Theatre, Cinema, Dance and Performance. Choosing a field shows its **categories**, and choosing a category shows its **sub-disciplines** (several can be selected: any of them). Each choice shows how many results it gives. Also: full‑text search, type, status, region, country, deadline range, best fit (★), remote, free. Everything is in the URL, so views can be shared. Admins edit the field → category → sub‑discipline tree in **Admin → Fields & disciplines**. |
 | **Live status** | Status labels and "N days left" are worked out from the dates on every request. Nothing goes stale between refresh runs. |
 | **Add by link** | An admin pastes a URL. The app fetches the organiser's page, Claude extracts the fields using the MISC curation criteria (scope, geography rules, eligibility traps), and the admin reviews the pre‑filled form before saving. Without an API key, a basic extractor fills in the title, description and deadline. |
 | **Manual entry / edit** | Full edit form. Every change is logged in the entry's history. |
@@ -46,7 +46,8 @@ flask add-url https://… [--status open]                    # extract one link 
 flask refresh [--limit 40] [--no-llm]                      # archive expired + re-check pages
 flask translate [--dry-run]                                # fill missing LT/EN texts with Claude
 flask send-notifications [--dry-run]                       # daily e-mails (reminders, series news, admin digest)
-flask mail-test you@lmta.lt                                # check the SMTP settings
+flask mail-test you@lmta.lt                                # check the SMTP settings (or Admin → E-mails → Send a test)
+flask classify-fields [--dry-run]                          # Claude adds Theatre / Cinema / Dance fields where they belong
 flask make-admin someone@lmta.lt
 flask db migrate -m "…" && flask db upgrade                # after model changes
 ```
@@ -89,7 +90,33 @@ weekly scan of the series page finds the 2027 call ─▶ new pending entry ─a
 
 - **Create series:** **Admin → Series → Suggested series** groups the existing entries by website. Untick what doesn't belong, check the name and the page address (where new calls are published), and create. A single entry can also become a series ("Create a series from this entry" on its edit page).
 - **Expected next call:** worked out from when previous calls appeared, plus the rhythm (yearly or twice a year). You can also set a fixed usual month. If the expected call hasn't been found within about 3 months of that date, the placeholder is archived and the admins are told to check.
+- **Series have to be created once.** The upgrade adds the series feature but doesn't create any series, because grouping needs a human eye (e.g. *societymusictheory.org* is a listing of many organisers, not one series). On each installation (development and production separately, since each has its own database), go to **Admin → Series → Suggested series** and create the series you want. From then on the weekly job maintains them.
 - **New entries are never published automatically.** Calls found on series pages, user suggestions and different editions found during re‑checks all wait in **Admin → Waiting for approval**, and the admin digest e‑mail lists them.
+
+## Fields, categories and sub-disciplines
+
+Three levels, stored in the database and edited in **Admin → Fields & disciplines**:
+
+- **Fields:** Music and Sound, Theatre, Cinema, Dance and Performance.
+- **Categories** inside each field, e.g. *Music and Sound → Spatial audio*. A category can also be **shared by all fields**; *Format & context* (research, paper, workshop, premiere, mobility…) is shared and appears under every field.
+- **Sub-disciplines** inside each category, e.g. *ambisonics*. These are what an entry is tagged with.
+
+An entry automatically belongs to the fields of its sub-disciplines. More fields can be ticked by hand, and an entry is never left without a field (default: Music and Sound).
+
+In the editor you can rename anything (LT/EN), change colours (a hue 0–359) and order, and add or remove items. **Keys** (e.g. `filmmusic`) are what entries store and can't be changed. Deleting is safe:
+
+- **Field:** its categories move to another field or become shared, and its entries move to the target field.
+- **Category:** its sub-disciplines move to another category.
+- **Sub-discipline:** it's removed from entries, or replaced by another one, which also works as a merge.
+
+The existing 278 entries were all assigned to Music and Sound. Theatre, Cinema or Dance were added only where the title said so unmistakably (opera and music‑theatre calls; film‑music and cinema calls; dance culture). To let Claude review all entries and add the other fields where they really belong, run once on the server:
+
+```bash
+sudo -u opencalls env FLASK_APP=wsgi.py .venv/bin/flask classify-fields --dry-run   # see the suggestions
+sudo -u opencalls env FLASK_APP=wsgi.py .venv/bin/flask classify-fields             # apply (adds only, logged per entry)
+```
+
+New entries get their fields and sub-disciplines from Claude when added by link. Claude chooses from the current tree, so anything an admin adds is used straight away.
 
 ## E-mail notifications (SMTP)
 
@@ -101,6 +128,8 @@ The daily job (`flask send-notifications`, 09:00) sends **at most one e‑mail p
 | New calls in followed series | the day after a call of the series is published or approved |
 | Changes to subscribed calls | e.g. a deadline extension found by the weekly check, or changed by an admin |
 | Admin digest (admins only) | entries newly waiting for approval or review |
+
+**Admin → E‑mails** lists every e‑mail the app sent or tried to send: recipient, subject, type, status (*sent*, *failed* with the server's reason, or *log only* when SMTP isn't configured) and the text. Failed connections to the mail server are recorded too. Entries older than a year are removed automatically. **Admin → E‑mails → Send a test e‑mail** shows the current SMTP settings (without the password) and sends a simple test, a preview of a user's daily e‑mail, or a preview of the admin digest. Previews are marked [TEST] and change nothing.
 
 Users choose what they receive under **My subscriptions → E‑mail notifications**. Each e‑mail has a one‑click "stop all e‑mails" link and a `List-Unsubscribe` header. Language follows the user's LT/EN choice.
 
@@ -261,8 +290,10 @@ The coordinator's weekly Claude routine produces `MISC-sarasas-<date>.html` with
 
 ```
 app/
-  models.py      Call, Series, CallChange (audit), User, Subscription, SeriesFollow, Notification, RefreshRun
-  taxonomy.py    types, topics/families, countries → regions + coordinates
+  models.py      Call, Series, Field/Category/Discipline, CallChange (audit), User, Subscription, SeriesFollow,
+                 Notification, EmailLog, RefreshRun
+  taxonomy.py    default field → category → sub-discipline tree, tax() helper, types, countries
+  classify.py    flask classify-fields (Claude assigns fields to existing entries)
   search.py      filters shared by the list, API, calendar exports and map
   extract.py     page fetch + Claude structured extraction + heuristic fallback
   refresh.py     weekly job: archive, translate, re-check calls (overwrite guard), scan series

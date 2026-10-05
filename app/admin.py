@@ -1,3 +1,4 @@
+import re
 from functools import wraps
 
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
@@ -89,6 +90,11 @@ def _form_to_call(call):
     if "series_id" in request.form and sid != call.series_id:
         changes.append(("series_id", call.series_id, sid))
         call.series_id = sid
+    if "fields" in request.form or request.form.get("title_en") is not None:
+        fields = request.form.getlist("fields")
+        if fields != call.field_list:
+            changes.append(("fields", ",".join(call.field_list), ",".join(fields)))
+            call.field_list = fields          # implied fields are added again on save (sync_fields)
     topics = request.form.getlist("topics")
     if topics != call.topic_list:
         changes.append(("topics", ",".join(call.topic_list), ",".join(topics)))
@@ -361,3 +367,216 @@ def make_series(call_id):
     db.session.commit()
     flash(tr("Series created from this entry — check its name and page address."), "ok")
     return redirect(url_for(".series_edit", series_id=s.id))
+
+
+# ---------------------------------------------------------------- taxonomy (fields → categories → sub-disciplines)
+
+KEY_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{1,38}$")
+
+
+def _int(v, default=None, lo=None, hi=None):
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return default
+    if (lo is not None and n < lo) or (hi is not None and n > hi):
+        return default
+    return n
+
+
+def _names(obj):
+    obj.name_lt = (request.form.get("name_lt") or "").strip()
+    obj.name_en = (request.form.get("name_en") or "").strip()
+    obj.position = _int(request.form.get("position"), obj.position or 0)
+    return bool(obj.name_lt or obj.name_en)
+
+
+def _new_key(model):
+    key = (request.form.get("key") or "").strip().lower()
+    if not KEY_RE.match(key):
+        flash(tr("The key must be 2–39 lowercase letters, digits, - or _ (e.g. film-music)."), "error")
+        return None
+    if model.query.filter_by(key=key).first():
+        flash(tr("This key is already used."), "error")
+        return None
+    return key
+
+
+def _swap_key(attr, old, new):
+    """Replace (or remove, when new is empty) a key in every entry's topics / fields list."""
+    n = 0
+    col = getattr(Call, attr)
+    for c in Call.query.filter(col.like(f"%,{old},%")).all():
+        lst = c.topic_list if attr == "topics" else c.field_list
+        lst = [new if x == old else x for x in lst if new or x != old]
+        lst = list(dict.fromkeys(x for x in lst if x))
+        if attr == "topics":
+            c.topic_list = lst
+        else:
+            c.field_list = lst
+        n += 1
+    return n
+
+
+@bp.route("/taxonomy", methods=["GET", "POST"])
+@admin_required
+def taxonomy():
+    from collections import Counter
+
+    from .models import Category, Discipline, Field
+    from .taxonomy import tax
+    if request.method == "POST":
+        act = request.form.get("action", "")
+        oid = _int(request.form.get("id"))
+        anchor = ""
+        if act == "field_save":
+            fl = db.get_or_404(Field, oid) if oid else Field()
+            if not oid:
+                fl.key = _new_key(Field)
+                if not fl.key:
+                    return redirect(url_for(".taxonomy"))
+                db.session.add(fl)
+            if not _names(fl):
+                flash(tr("A name is required."), "error")
+                return redirect(url_for(".taxonomy"))
+            fl.hue = _int(request.form.get("hue"), fl.hue if fl.hue is not None else 212, 0, 359)
+            anchor = f"f-{fl.key}"
+        elif act == "field_delete":
+            fl = db.get_or_404(Field, oid)
+            target = Field.query.filter_by(key=request.form.get("move_to") or "").first()
+            if target and target.id == fl.id:
+                target = None
+            key = fl.key
+            for c in list(fl.categories):
+                c.field_id = target.id if target else None
+            db.session.delete(fl)
+            db.session.flush()          # tree first, so the entries' field sync sees the new tree
+            tax(refresh=True)
+            n = _swap_key("fields", key, target.key if target else "")
+            flash(tr("Field deleted; {0} entries updated.").format(n), "ok")
+        elif act == "cat_save":
+            c = db.get_or_404(Category, oid) if oid else Category()
+            if not oid:
+                c.key = _new_key(Category)
+                if not c.key:
+                    return redirect(url_for(".taxonomy"))
+                db.session.add(c)
+            if not _names(c):
+                flash(tr("A name is required."), "error")
+                return redirect(url_for(".taxonomy"))
+            c.field_id = _int(request.form.get("field_id"))
+            c.hue = _int(request.form.get("hue"), None, 0, 359)
+            anchor = f"c-{c.key}"
+        elif act == "cat_delete":
+            c = db.get_or_404(Category, oid)
+            target = db.session.get(Category, _int(request.form.get("move_to")) or 0)
+            if c.disciplines and (not target or target.id == c.id):
+                flash(tr("Choose another category for its sub-disciplines first."), "error")
+                return redirect(url_for(".taxonomy", _anchor=f"c-{c.key}"))
+            for d in list(c.disciplines):
+                d.category_id = target.id
+            db.session.delete(c)
+            flash(tr("Category deleted."), "ok")
+        elif act == "disc_save":
+            d = db.get_or_404(Discipline, oid) if oid else Discipline()
+            if not oid:
+                d.key = _new_key(Discipline)
+                if not d.key:
+                    return redirect(url_for(".taxonomy"))
+                db.session.add(d)
+            if not _names(d):
+                flash(tr("A name is required."), "error")
+                return redirect(url_for(".taxonomy"))
+            cid = _int(request.form.get("category_id"))
+            if not cid or not db.session.get(Category, cid):
+                flash(tr("Choose a category."), "error")
+                return redirect(url_for(".taxonomy"))
+            d.category_id = cid
+            cat = db.session.get(Category, cid)
+            anchor = f"c-{cat.key}"
+        elif act == "disc_delete":
+            d = db.get_or_404(Discipline, oid)
+            repl = request.form.get("replace_with") or ""
+            if repl == d.key or not Discipline.query.filter_by(key=repl).first():
+                repl = ""
+            key, cat = d.key, d.category
+            db.session.delete(d)
+            db.session.flush()
+            tax(refresh=True)
+            n = _swap_key("topics", key, repl)
+            flash(tr("Sub-discipline deleted; {0} entries updated.").format(n), "ok")
+            anchor = f"c-{cat.key}" if cat else ""
+        db.session.commit()
+        tax(refresh=True)
+        if act.endswith("_save"):
+            flash(tr("Saved."), "ok")
+        return redirect(url_for(".taxonomy", _anchor=anchor) if anchor else url_for(".taxonomy"))
+
+    t = tax(refresh=True)
+    calls = Call.query.with_entities(Call.topics, Call.fields).all()
+    topic_n = Counter(x for topics, _ in calls for x in (topics or "").split(",") if x)
+    field_n = Counter(x for _, fields in calls for x in (fields or "").split(",") if x)
+    return render_template("admin/taxonomy.html", t=t, topic_n=topic_n, field_n=field_n)
+
+
+# ---------------------------------------------------------------- e-mail log and test e-mails
+
+@bp.route("/emails")
+@admin_required
+def emails():
+    from .models import EmailLog
+    q = EmailLog.query
+    status, kind, who = request.args.get("status", ""), request.args.get("kind", ""), request.args.get("q", "").strip()
+    if status:
+        q = q.filter(EmailLog.status == status)
+    if kind:
+        q = q.filter(EmailLog.kind == kind)
+    if who:
+        q = q.filter(EmailLog.to.ilike(f"%{who}%") | EmailLog.subject.ilike(f"%{who}%"))
+    page = _int(request.args.get("page"), 1, 1)
+    total = q.count()
+    rows = q.order_by(EmailLog.at.desc()).offset((page - 1) * 100).limit(100).all()
+    counts = {s: EmailLog.query.filter_by(status=s).count() for s in ("sent", "failed", "logged")}
+    return render_template("admin/emails.html", rows=rows, total=total, page=page, pages=(total + 99) // 100,
+                           status=status, kind=kind, who=who, counts=counts)
+
+
+@bp.route("/emails/<int:email_id>")
+@admin_required
+def email_detail(email_id):
+    from .models import EmailLog
+    return render_template("admin/email_detail.html", e=db.get_or_404(EmailLog, email_id))
+
+
+@bp.route("/emails/test", methods=["GET", "POST"])
+@admin_required
+def email_test():
+    import smtplib
+
+    from .notify import describe_smtp_error, send_test
+    cfg = current_app.config
+    users = (User.query.filter(User.subscriptions.any() | User.follows.any()).order_by(User.email).all())
+    if request.method == "POST":
+        to = (request.form.get("to") or "").strip()
+        kind = request.form.get("kind", "simple")
+        user = db.session.get(User, _int(request.form.get("user_id")) or 0) if kind == "user" else None
+        if "@" not in to:
+            flash(tr("Enter a valid e-mail address."), "error")
+        elif kind == "user" and not user:
+            flash(tr("Choose whose daily e-mail to preview."), "error")
+        else:
+            try:
+                send_test(to, kind, user, get_lang())
+                if cfg["MAIL_BACKEND"] == "smtp":
+                    flash(tr("Test e-mail sent to {0}. If it does not arrive, check the spam folder and the log below.").format(to), "ok")
+                else:
+                    flash(tr("SMTP is not configured, so the e-mail was only written to the log (see below)."), "error")
+            except (smtplib.SMTPException, OSError) as e:
+                flash(tr("Sending failed:") + " " + describe_smtp_error(e), "error")
+        return redirect(url_for(".email_test"))
+    from .models import EmailLog
+    recent = EmailLog.query.filter_by(kind="test").order_by(EmailLog.at.desc()).limit(10).all()
+    smtp = {"backend": cfg["MAIL_BACKEND"], "host": cfg["SMTP_HOST"], "port": cfg["SMTP_PORT"],
+            "user": cfg["SMTP_USERNAME"], "starttls": cfg["SMTP_STARTTLS"], "from": cfg["MAIL_FROM"],
+            "reply_to": cfg["MAIL_REPLY_TO"], "password_set": bool(cfg["SMTP_PASSWORD"])}
+    return render_template("admin/email_test.html", smtp=smtp, users=users, recent=recent)

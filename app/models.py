@@ -63,7 +63,8 @@ class Call(db.Model):
     url = db.Column(db.String(1000), default="", index=True)
     desc_lt = db.Column(db.Text, default="")
     desc_en = db.Column(db.Text, default="")
-    topics = db.Column(db.String(400), default="")  # stored as ",ai,research," for portable LIKE filtering
+    topics = db.Column(db.String(400), default="")  # sub-discipline keys, stored as ",ai,research," (portable LIKE filtering)
+    fields = db.Column(db.String(200), default="", nullable=False, server_default="")  # field keys, ",music,theatre,"
 
     kam_tinka = db.Column(db.Text, default="")         # eligibility / who it suits
     nauda = db.Column(db.Text, default="")             # concrete benefit for students
@@ -124,6 +125,15 @@ class Call(db.Model):
     def topic_list(self, values):
         vals = [v.strip() for v in values if v and v.strip()]
         self.topics = ("," + ",".join(dict.fromkeys(vals)) + ",") if vals else ""
+
+    @property
+    def field_list(self):
+        return [f for f in (self.fields or "").split(",") if f]
+
+    @field_list.setter
+    def field_list(self, values):
+        vals = [v.strip() for v in values if v and v.strip()]
+        self.fields = ("," + ",".join(dict.fromkeys(vals)) + ",") if vals else ""
 
     def title(self, lang):
         return (self.title_lt if lang == "lt" else self.title_en) or self.title_en or self.title_lt or self.url
@@ -345,6 +355,61 @@ class Notification(db.Model):
     sent_at = db.Column(db.DateTime, index=True)
     user = db.relationship("User")
     call = db.relationship("Call", overlaps="notifications")
+
+
+class Field(db.Model):
+    """Top level of the taxonomy: Music and Sound, Theatre, Cinema, Dance and Performance."""
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(40), unique=True, nullable=False)
+    name_lt = db.Column(db.String(120), default="")
+    name_en = db.Column(db.String(120), default="")
+    hue = db.Column(db.Integer, default=212)
+    position = db.Column(db.Integer, default=0)
+    categories = db.relationship("Category", backref="field", order_by="Category.position")
+
+    def name(self, lang):
+        return (self.name_lt if lang == "lt" else self.name_en) or self.name_en or self.name_lt
+
+
+class Category(db.Model):
+    """Second level. field_id NULL = shared by all fields (e.g. research, workshops, formats)."""
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(40), unique=True, nullable=False)
+    field_id = db.Column(db.Integer, db.ForeignKey("field.id"), index=True)
+    name_lt = db.Column(db.String(120), default="")
+    name_en = db.Column(db.String(120), default="")
+    hue = db.Column(db.Integer)                 # chip colour; empty = neutral outline
+    position = db.Column(db.Integer, default=0)
+    disciplines = db.relationship("Discipline", backref="category", order_by="Discipline.position")
+
+    def name(self, lang):
+        return (self.name_lt if lang == "lt" else self.name_en) or self.name_en or self.name_lt
+
+
+class Discipline(db.Model):
+    """Third level (sub-discipline). Its key is what Call.topics stores."""
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(40), unique=True, nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey("category.id"), nullable=False, index=True)
+    name_lt = db.Column(db.String(120), default="")
+    name_en = db.Column(db.String(120), default="")
+    position = db.Column(db.Integer, default=0)
+
+    def name(self, lang):
+        return (self.name_lt if lang == "lt" else self.name_en) or self.name_en or self.name_lt
+
+
+class EmailLog(db.Model):
+    """Every e-mail the app sent or tried to send (Admin → E-mails)."""
+    id = db.Column(db.Integer, primary_key=True)
+    at = db.Column(db.DateTime, default=utcnow, index=True)
+    to = db.Column(db.String(320), default="", index=True)
+    subject = db.Column(db.String(400), default="")
+    kind = db.Column(db.String(24), default="other")    # notifications | admin_digest | test | other
+    status = db.Column(db.String(12), default="sent")   # sent | failed | logged (no SMTP configured)
+    error = db.Column(db.Text, default="")
+    body = db.Column(db.Text, default="")
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="SET NULL"))
 
 
 class RefreshRun(db.Model):

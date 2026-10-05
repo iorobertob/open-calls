@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Fields, categories and sub-disciplines") }}{% endblock %}
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+
+{% macro disc_row(d, cat) %}
+<div class="txrow disc">
+  <form method="post" class="txform">{{ csrf() }}<input type="hidden" name="action" value="disc_save"><input type="hidden" name="id" value="{{ d.id }}">
+    <code class="key" title="{{ _('Key (stored in entries, cannot change)') }}">{{ d.key }}</code>
+    <input name="name_lt" value="{{ d.name_lt }}" aria-label="{{ _('Name (LT)') }}" placeholder="LT">
+    <input name="name_en" value="{{ d.name_en }}" aria-label="{{ _('Name (EN)') }}" placeholder="EN">
+    <select name="category_id" aria-label="{{ _('Category') }}">{% for c in t.categories %}<option value="{{ c.id }}" {{ 'selected' if c.id == d.category_id }}>{{ c.name(lang) }}</option>{% endfor %}</select>
+    <input name="position" type="number" value="{{ d.position }}" class="pos" aria-label="{{ _('Order') }}">
+    <span class="count" title="{{ _('Entries using it') }}">{{ topic_n[d.key] }}</span>
+    <button class="btn">{{ _("Save") }}</button>
+  </form>
+  <form method="post" class="txform del" data-danger data-confirm-title="{{ _('Delete sub-discipline') }}" data-confirm-ok="{{ _('Delete') }}"
+        data-confirm="{{ _('Delete “{0}”? It is used by {1} entries.').format(d.name(lang), topic_n[d.key]) }} {{ _('They get the replacement you chose, or lose this sub-discipline.') }}">
+    {{ csrf() }}<input type="hidden" name="action" value="disc_delete"><input type="hidden" name="id" value="{{ d.id }}">
+    <select name="replace_with" aria-label="{{ _('Replace with') }}"><option value="">{{ _("— just remove it —") }}</option>
+      {% for x in t.disciplines if x.key != d.key %}<option value="{{ x.key }}">{{ _("replace with") }} {{ x.name(lang) }}</option>{% endfor %}</select>
+    <button class="btn danger">🗑</button>
+  </form>
+</div>
+{% endmacro %}
+
+{% macro category_block(c) %}
+<section class="txcat" id="c-{{ c.key }}" style="--th:{{ c.hue if c.hue is not none else 220 }}">
+  <div class="txrow cat">
+    <form method="post" class="txform">{{ csrf() }}<input type="hidden" name="action" value="cat_save"><input type="hidden" name="id" value="{{ c.id }}">
+      <span class="swatch {{ 'neutral' if c.hue is none }}"></span><code class="key">{{ c.key }}</code>
+      <input name="name_lt" value="{{ c.name_lt }}" aria-label="{{ _('Name (LT)') }}" placeholder="LT">
+      <input name="name_en" value="{{ c.name_en }}" aria-label="{{ _('Name (EN)') }}" placeholder="EN">
+      <select name="field_id" aria-label="{{ _('Field') }}"><option value="">{{ _("Shared by all fields") }}</option>
+        {% for fl in t.fields %}<option value="{{ fl.id }}" {{ 'selected' if fl.id == c.field_id }}>{{ fl.name(lang) }}</option>{% endfor %}</select>
+      <input name="hue" type="number" min="0" max="359" value="{{ c.hue if c.hue is not none else '' }}" class="pos" placeholder="{{ _('colour') }}" title="{{ _('Colour: 0–359 (hue); empty = neutral outline') }}">
+      <input name="position" type="number" value="{{ c.position }}" class="pos" aria-label="{{ _('Order') }}">
+      <button class="btn">{{ _("Save") }}</button>
+    </form>
+    <form method="post" class="txform del" data-danger data-confirm-title="{{ _('Delete category') }}" data-confirm-ok="{{ _('Delete') }}"
+          data-confirm="{{ _('Delete the category “{0}”? Its sub-disciplines move to the category you chose.').format(c.name(lang)) }}">
+      {{ csrf() }}<input type="hidden" name="action" value="cat_delete"><input type="hidden" name="id" value="{{ c.id }}">
+      {% if c.disciplines %}<select name="move_to" aria-label="{{ _('Move its sub-disciplines to') }}"><option value="">{{ _("move sub-disciplines to…") }}</option>
+        {% for x in t.categories if x.id != c.id %}<option value="{{ x.id }}">{{ x.name(lang) }}</option>{% endfor %}</select>{% endif %}
+      <button class="btn danger">🗑</button>
+    </form>
+  </div>
+  <div class="txdiscs">
+    {% for d in c.disciplines %}{{ disc_row(d, c) }}{% endfor %}
+    <form method="post" class="txform add">{{ csrf() }}<input type="hidden" name="action" value="disc_save"><input type="hidden" name="category_id" value="{{ c.id }}">
+      <input name="key" required pattern="[a-z0-9][a-z0-9_\-]{1,38}" placeholder="{{ _('new-key') }}" aria-label="{{ _('Key') }}" class="keyin">
+      <input name="name_lt" placeholder="{{ _('Name (LT)') }}"><input name="name_en" placeholder="{{ _('Name (EN)') }}">
+      <input name="position" type="number" value="{{ c.disciplines|length }}" class="pos">
+      <button class="btn ghost">＋ {{ _("Add sub-discipline") }}</button>
+    </form>
+  </div>
+</section>
+{% endmacro %}
+
+{% block content %}
+<p class="back"><a href="{{ url_for('admin.dashboard') }}">← {{ _("Admin") }}</a></p>
+<h1>{{ _("Fields, categories and sub-disciplines") }}</h1>
+<p class="hint">{{ _("Visitors browse field → category → sub-discipline on the home page. Keys are what entries store and cannot change; names, colours and order can. Shared categories appear under every field.") }}</p>
+
+{% for fl, cats in t.grouped() %}
+<details class="panel txfield" id="{{ 'f-' ~ fl.key if fl else 'shared' }}" open {% if fl %}style="--fh:{{ fl.hue }}"{% endif %}>
+  <summary><span class="fdot" {% if not fl %}style="background:var(--mut)"{% endif %}></span>
+    <b>{{ fl.name(lang) if fl else _("Shared by all fields") }}</b>
+    {% if fl %}<small class="hint">{{ field_n[fl.key] }} {{ _("entries") }}</small>{% endif %}</summary>
+  {% if fl %}
+  <div class="txrow field">
+    <form method="post" class="txform">{{ csrf() }}<input type="hidden" name="action" value="field_save"><input type="hidden" name="id" value="{{ fl.id }}">
+      <code class="key">{{ fl.key }}</code>
+      <input name="name_lt" value="{{ fl.name_lt }}" aria-label="{{ _('Name (LT)') }}" placeholder="LT">
+      <input name="name_en" value="{{ fl.name_en }}" aria-label="{{ _('Name (EN)') }}" placeholder="EN">
+      <input name="hue" type="number" min="0" max="359" value="{{ fl.hue }}" class="pos" title="{{ _('Colour: 0–359 (hue); empty = neutral outline') }}">
+      <input name="position" type="number" value="{{ fl.position }}" class="pos" aria-label="{{ _('Order') }}">
+      <button class="btn">{{ _("Save") }}</button>
+    </form>
+    <form method="post" class="txform del" data-danger data-confirm-title="{{ _('Delete field') }}" data-confirm-ok="{{ _('Delete') }}"
+          data-confirm="{{ _('Delete the field “{0}”? Its categories and its {1} entries move to the field you chose (or become shared / lose this field).').format(fl.name(lang), field_n[fl.key]) }}">
+      {{ csrf() }}<input type="hidden" name="action" value="field_delete"><input type="hidden" name="id" value="{{ fl.id }}">
+      <select name="move_to" aria-label="{{ _('Move to') }}"><option value="">{{ _("categories become shared") }}</option>
+        {% for x in t.fields if x.id != fl.id %}<option value="{{ x.key }}">{{ _("move to") }} {{ x.name(lang) }}</option>{% endfor %}</select>
+      <button class="btn danger">🗑 {{ _("Delete field") }}</button>
+    </form>
+  </div>
+  {% endif %}
+  {% for c, discs in cats %}{{ category_block(c) }}{% endfor %}
+  <form method="post" class="txform add cat">{{ csrf() }}<input type="hidden" name="action" value="cat_save"><input type="hidden" name="field_id" value="{{ fl.id if fl else '' }}">
+    <input name="key" required pattern="[a-z0-9][a-z0-9_\-]{1,38}" placeholder="{{ _('new-key') }}" aria-label="{{ _('Key') }}" class="keyin">
+    <input name="name_lt" placeholder="{{ _('Name (LT)') }}"><input name="name_en" placeholder="{{ _('Name (EN)') }}">
+    <input name="hue" type="number" min="0" max="359" class="pos" placeholder="{{ _('colour') }}">
+    <input name="position" type="number" value="{{ cats|length }}" class="pos">
+    <button class="btn ghost">＋ {{ _("Add category") }}</button>
+  </form>
+</details>
+{% endfor %}
+
+<section class="panel">
+  <h2>{{ _("Add a field") }}</h2>
+  <form method="post" class="txform add">{{ csrf() }}<input type="hidden" name="action" value="field_save">
+    <input name="key" required pattern="[a-z0-9][a-z0-9_\-]{1,38}" placeholder="{{ _('new-key') }}" aria-label="{{ _('Key') }}" class="keyin">
+    <input name="name_lt" placeholder="{{ _('Name (LT)') }}"><input name="name_en" placeholder="{{ _('Name (EN)') }}">
+    <input name="hue" type="number" min="0" max="359" class="pos" placeholder="{{ _('colour') }}" value="200">
+    <input name="position" type="number" value="{{ t.fields|length }}" class="pos">
+    <button class="btn primary">＋ {{ _("Add field") }}</button>
+  </form>
+</section>
+{% endblock %}

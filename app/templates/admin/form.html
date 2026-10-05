@@ -53,8 +53,22 @@
   </fieldset>
   <fieldset><legend>{{ _("Description") }}</legend>
     {{ field('desc_lt', 'Short description (LT, ≤165)', wide=True, rows=2) }} {{ field('desc_en', 'Short description (EN, ≤165)', wide=True, rows=2) }}
-    <div class="wide topicpick">{% for fam, fv in FAMILIES.items() %}<div class="fam"><span>{{ fv[lang] }}</span>
-      {% for t, tv in TOPICS.items() if tv[0] == fam %}<label class="topic fam-{{ fam }}"><input type="checkbox" name="topics" value="{{ t }}" {{ 'checked' if t in c.topic_list }}>{{ topic_label(t, lang) }}</label>{% endfor %}</div>{% endfor %}</div>
+    <div class="wide">
+      <div class="hint">{{ _("Fields") }} — {{ _("an entry belongs to the fields of its sub-disciplines automatically; tick more if needed") }}</div>
+      <div class="fieldpick">{% for fl in TAX.fields %}<label class="inline ftag-pick" style="--fh:{{ fl.hue }}"><input type="checkbox" name="fields" value="{{ fl.key }}" {{ 'checked' if fl.key in c.field_list }}> {{ fl.name(lang) }}</label>{% endfor %}</div>
+    </div>
+    <div class="wide topicpick">
+      {% for fl, cats in TAX.grouped() %}
+      <details class="pickfield" {{ 'open' if (fl and fl.key in c.field_list) or (not fl) or not c.field_list }}>
+        <summary>{{ fl.name(lang) if fl else _("Shared by all fields") }}</summary>
+        {% for cat, discs in cats %}
+        <div class="fam"><span>{{ cat.name(lang) }}</span>
+          {% for d in discs %}<label class="topic {{ 'neutral' if cat.hue is none }}" style="--th:{{ cat.hue if cat.hue is not none else 220 }}"><input type="checkbox" name="topics" value="{{ d.key }}" {{ 'checked' if d.key in c.topic_list }}>{{ d.name(lang) }}</label>{% endfor %}
+        </div>
+        {% endfor %}
+      </details>
+      {% endfor %}
+    </div>
   </fieldset>
   <fieldset><legend>{{ _("Details") }}</legend>
     <p class="hint wide">{{ _("Fill in either language — missing translations are added automatically when the Claude API is configured.") }}</p>

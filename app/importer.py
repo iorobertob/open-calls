@@ -103,6 +103,11 @@ def apply_record(call, rec, origin="import", overwrite=True):
         if attr in SINGLE_PAIRS and hasattr(call, en) and not any(a == en for a, _, _ in changed) and getattr(call, en):
             changed.append((en, getattr(call, en), ""))
             setattr(call, en, "")
+    if "fields" in rec and rec["fields"]:
+        old = call.field_list
+        if old != list(rec["fields"]):
+            call.field_list = rec["fields"]
+            changed.append(("fields", ",".join(old), ",".join(call.field_list)))
     if "topics" in rec:
         old = call.topic_list
         if old != list(rec["topics"] or []):

@@ -48,6 +48,7 @@
   <div class="cmain">
     <div class="meta-top">
       <span class="kind">{{ KINDS.get(c.kind, KINDS['other'])['short_' ~ lang] }}</span>
+      {% for fk in c.field_list %}{% set fl = TAX.field_by_key.get(fk) %}{% if fl %}<span class="ftag" style="--fh:{{ fl.hue }}">{{ fl.name(lang) }}</span>{% endif %}{% endfor %}
       {% if c.star %}<span class="star" title="{{ _('Best fit') }}">★</span>{% endif %}
       {% if not c.verified %}<span class="unver" title="{{ _('Not verified — open manually') }}">?</span>{% endif %}
     </div>
@@ -56,7 +57,7 @@
     <div class="org">{{ c.country_code|flag }} {{ c.org_name(lang) }}{% if c.city(lang) %} · {{ c.city(lang) }}{% endif %}{% if c.country(lang) %}, {{ c.country(lang) }}{% endif %}</div>
     {% if c.desc(lang) %}<p class="desc">{{ c.desc(lang) }}</p>{% endif %}
     <div class="topics">
-      {% for t in c.topic_list %}<a class="topic fam-{{ TOPICS.get(t, ('ctx',))[0] }}" href="{{ url_for('main.index', topic=t) }}">{{ topic_label(t, lang) }}</a>{% endfor %}
+      {% for t in c.topic_list %}{% set h = TAX.hue(t) %}{% set tc = TAX.category_of(t) %}<a class="topic {{ 'neutral' if h is none }}" style="--th:{{ h if h is not none else 220 }}" href="{{ url_for('main.index', cat=tc.key if tc else None, topic=t) }}">{{ topic_label(t, lang) }}</a>{% endfor %}
     </div>
   </div>
   <aside class="cside">

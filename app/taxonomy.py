@@ -1,6 +1,11 @@
-"""Controlled vocabularies: entry types, topics (disciplines), topic families (areas),
-countries and regions. Topic keys and families mirror the MISC TV-screen template
-(MISC-ekranas-SABLONAS.html) so data stays interchangeable with the weekly workflow."""
+"""Controlled vocabularies.
+
+* Entry types (KINDS), countries and regions: fixed here.
+* Fields → categories → sub-disciplines: stored in the database (Field, Category, Discipline) so
+  admins can edit them (Admin → Disciplines). DEFAULT_TREE below is only the initial content.
+  `tax()` gives the current tree for one request.
+* FAMILIES / TOPICS below are the fixed vocabulary of the MISC TV-screen template
+  (MISC-ekranas-SABLONAS.html); only /screen still uses them."""
 
 KINDS = {
     "competition": {"lt": "Konkursai", "en": "Competitions", "short_lt": "Konkursas", "short_en": "Competition", "hue": 38},
@@ -162,3 +167,166 @@ def country_name(code, lang):
     if not c:
         return code or ""
     return c[3] if lang == "lt" else c[4]
+
+
+# ---------------------------------------------------------------- fields → categories → sub-disciplines
+
+# (key, name_lt, name_en, hue)
+DEFAULT_FIELDS = [
+    ("music", "Muzika ir garsas", "Music and Sound", 212),
+    ("theatre", "Teatras", "Theatre", 8),
+    ("cinema", "Kinas", "Cinema", 280),
+    ("dance", "Šokis ir performansas", "Dance and Performance", 142),
+]
+# (key, field key or None = shared by all fields, name_lt, name_en, hue or None, [(discipline key, lt, en), …])
+DEFAULT_TREE = [
+    ("studio", "music", "Elektronika ir studija", "Electronics & studio", 330, [
+        ("electronic", "elektroninė", "electronic"), ("acousmatic", "akuzmatinė", "acousmatic"),
+        ("concrete", "musique concrète", "musique concrète"), ("fixedmedia", "fixed media", "fixed media"),
+        ("liveelec", "gyva elektronika", "live electronics")]),
+    ("spatial", "music", "Erdvinis garsas", "Spatial audio", 212, [
+        ("spatial", "erdvinis garsas", "spatial audio"), ("ambisonics", "ambisonics", "ambisonics"),
+        ("multichannel", "daugiakanalis", "multichannel"), ("immersive", "immersive / 3D", "immersive / 3D"),
+        ("vrar", "VR / AR", "VR / AR")]),
+    ("acoustic", "music", "Instrumentinė ir vokalinė muzika", "Instrumental & vocal music", 42, [
+        ("instrumental", "instrumentinė", "instrumental"), ("ensemble", "ansamblis", "ensemble"),
+        ("orchestra", "orkestras", "orchestra"), ("chamber", "kamerinė", "chamber"), ("solo", "solo", "solo"),
+        ("voice", "balsas", "voice"), ("accordion", "akordeonas", "accordion"), ("winds", "pučiamieji", "winds"),
+        ("percussion", "mušamieji", "percussion")]),
+    ("compute", "music", "Kompiuterinė muzika ir AI", "Computer music & AI", 142, [
+        ("algorithmic", "algoritminė kompozicija", "algorithmic composition"), ("ai", "generatyvus AI", "generative AI"),
+        ("computermus", "kompiuterinė muzika", "computer music"), ("livecoding", "live coding", "live coding"),
+        ("musictech", "muzikos technologijos", "music technology")]),
+    ("soundart", "music", "Garso ir medijų menas", "Sound & media art", 275, [
+        ("soundart", "garso menas", "sound art"), ("mediaart", "medijų menas", "media art"),
+        ("installation", "instaliacija", "installation"), ("audiovisual", "audiovizualika", "audiovisual"),
+        ("radio", "radijas", "radio")]),
+    ("musicology", "music", "Muzikologija", "Musicology", 190, [
+        ("musicology", "muzikologija", "musicology")]),
+    ("drama", "theatre", "Drama ir režisūra", "Drama & directing", 8, [
+        ("drama", "drama", "drama"), ("directing", "režisūra", "directing"), ("acting", "vaidyba", "acting"),
+        ("playwriting", "dramaturgija", "playwriting")]),
+    ("musictheatre", "theatre", "Muzikinis teatras ir opera", "Music theatre & opera", 22, [
+        ("opera", "opera", "opera"), ("musictheatre", "muzikinis teatras", "music theatre")]),
+    ("stage", "theatre", "Scenografija ir scenos technologijos", "Stage design & technology", 32, [
+        ("scenography", "scenografija", "scenography"), ("stagelighting", "scenos šviesos", "stage lighting"),
+        ("stagesound", "scenos garsas", "stage sound")]),
+    ("theatrestudies", "theatre", "Teatrologija", "Theatre studies", 355, [
+        ("theatrestudies", "teatrologija", "theatre studies")]),
+    ("film", "cinema", "Kinas ir video", "Film & video", 280, [
+        ("filmmaking", "kino kūryba", "filmmaking"), ("documentary", "dokumentika", "documentary"),
+        ("animation", "animacija", "animation"), ("videoart", "videomenas", "video art")]),
+    ("filmsound", "cinema", "Garsas ir muzika kinui", "Film sound & music", 300, [
+        ("filmmusic", "kino muzika", "film music"), ("sounddesign", "garso dizainas", "sound design")]),
+    ("screenstudies", "cinema", "Kino studijos", "Screen studies", 260, [
+        ("filmstudies", "kino studijos", "film studies")]),
+    ("dancechoreo", "dance", "Šokis ir choreografija", "Dance & choreography", 142, [
+        ("dance", "šokis", "dance"), ("choreography", "choreografija", "choreography")]),
+    ("performanceart", "dance", "Performanso menas", "Performance art", 162, [
+        ("performanceart", "performanso menas", "performance art"), ("liveart", "gyvasis menas", "live art")]),
+    ("movementtech", "dance", "Judesys ir technologijos", "Movement & technology", 120, [
+        ("motioncapture", "judesio fiksavimas", "motion capture"), ("interactive", "interaktyvus performansas", "interactive performance")]),
+    ("formats", None, "Formatas ir kontekstas", "Format & context", None, [
+        ("research", "tyrimas", "research"), ("paper", "pranešimas", "paper"), ("workshop", "dirbtuvės", "workshop"),
+        ("performance", "atlikimas", "performance"), ("premiere", "premjera", "premiere"),
+        ("mobility", "mobilumas", "mobility"), ("pedagogy", "pedagogika", "education")]),
+]
+DEFAULT_FIELD = "music"   # every entry belongs to at least one field; MISC's own field by default
+
+
+def seed_defaults():
+    """Fill the taxonomy tables when they are empty (fresh install, tests)."""
+    from .models import Category, Discipline, Field, db
+    if Field.query.first():
+        return False
+    fields = {}
+    for i, (key, lt, en, hue) in enumerate(DEFAULT_FIELDS):
+        fields[key] = Field(key=key, name_lt=lt, name_en=en, hue=hue, position=i)
+        db.session.add(fields[key])
+    db.session.flush()
+    for i, (key, fkey, lt, en, hue, discs) in enumerate(DEFAULT_TREE):
+        cat = Category(key=key, field_id=fields[fkey].id if fkey else None, name_lt=lt, name_en=en, hue=hue, position=i)
+        db.session.add(cat)
+        db.session.flush()
+        for j, (dkey, dlt, den) in enumerate(discs):
+            db.session.add(Discipline(key=dkey, category_id=cat.id, name_lt=dlt, name_en=den, position=j))
+    db.session.commit()
+    return True
+
+
+class Tax:
+    """The current field → category → sub-discipline tree (loaded once per request)."""
+
+    def __init__(self):
+        from .models import Category, Discipline, Field
+        self.fields = Field.query.order_by(Field.position, Field.id).all()
+        self.categories = Category.query.order_by(Category.position, Category.id).all()
+        self.disciplines = Discipline.query.order_by(Discipline.position, Discipline.id).all()
+        self.field_by_key = {f.key: f for f in self.fields}
+        self.field_by_id = {f.id: f for f in self.fields}
+        self.cat_by_key = {c.key: c for c in self.categories}
+        self.cat_by_id = {c.id: c for c in self.categories}
+        self.disc_by_key = {d.key: d for d in self.disciplines}
+
+    # -- lookups
+    def label(self, key, lang):
+        d = self.disc_by_key.get(key)
+        return d.name(lang) if d else key
+
+    def category_of(self, key):
+        d = self.disc_by_key.get(key)
+        return self.cat_by_id.get(d.category_id) if d else None
+
+    def hue(self, key):
+        c = self.category_of(key)
+        return c.hue if c else None
+
+    def field_of_category(self, cat):
+        return self.field_by_id.get(cat.field_id) if cat and cat.field_id else None
+
+    def categories_for(self, field_key=None):
+        """Categories shown under a field: its own + the shared ones. No field = all categories."""
+        if not field_key:
+            return self.categories
+        f = self.field_by_key.get(field_key)
+        return [c for c in self.categories if c.field_id is None or (f and c.field_id == f.id)]
+
+    def disciplines_in(self, cat_key):
+        c = self.cat_by_key.get(cat_key)
+        return [d for d in self.disciplines if c and d.category_id == c.id]
+
+    def implied_fields(self, topic_keys):
+        out = []
+        for t in topic_keys:
+            f = self.field_of_category(self.category_of(t))
+            if f and f.key not in out:
+                out.append(f.key)
+        return out
+
+    def grouped(self):
+        """[(field or None, [(category, [discipline, …]), …]), …] for pickers; shared categories last."""
+        out = []
+        for f in self.fields + [None]:
+            cats = [c for c in self.categories if (c.field_id == f.id if f else c.field_id is None)]
+            out.append((f, [(c, [d for d in self.disciplines if d.category_id == c.id]) for c in cats]))
+        return out
+
+
+def tax(refresh=False):
+    from flask import g
+    if refresh or "tax" not in g:
+        g.tax = Tax()
+    return g.tax
+
+
+def sync_fields(call, t=None):
+    """A call belongs to the fields of its sub-disciplines (plus any set by hand); never to none."""
+    t = t or tax()
+    fields = [f for f in call.field_list if f in t.field_by_key] if t.fields else call.field_list
+    for f in t.implied_fields(call.topic_list):
+        if f not in fields:
+            fields.append(f)
+    if not fields:
+        fields = [DEFAULT_FIELD if (not t.fields or DEFAULT_FIELD in t.field_by_key) else t.fields[0].key]
+    if fields != call.field_list:
+        call.field_list = fields

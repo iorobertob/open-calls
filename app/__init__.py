@@ -13,7 +13,7 @@ from config import Config
 from .i18n import get_lang, tr
 from .messages import render as render_msg
 from .models import URGENT_DAYS, Series, db
-from .taxonomy import COUNTRIES, FAMILIES, KIND_ORDER, KINDS, REGIONS, TOPICS, country_name, topic_label
+from .taxonomy import COUNTRIES, KIND_ORDER, KINDS, REGIONS, country_name, sync_fields, tax
 
 csrf = CSRFProtect()
 migrate = Migrate()
@@ -47,8 +47,9 @@ def create_app(config=Config):
     @app.context_processor
     def inject():
         lang = get_lang()
-        return dict(lang=lang, _=lambda s: tr(s, lang), KINDS=KINDS, KIND_ORDER=KIND_ORDER, TOPICS=TOPICS,
-                    FAMILIES=FAMILIES, REGIONS=REGIONS, COUNTRIES=COUNTRIES, topic_label=topic_label,
+        t = tax()
+        return dict(lang=lang, _=lambda s: tr(s, lang), KINDS=KINDS, KIND_ORDER=KIND_ORDER, TAX=t,
+                    topic_label=lambda k, lg=lang: t.label(k, lg), REGIONS=REGIONS, COUNTRIES=COUNTRIES,
                     country_name=country_name, today=date.today(), URGENT_DAYS=URGENT_DAYS, user=current_user,
                     SERIES_ALL=lambda: Series.query.order_by(Series.name_en).all())
 
@@ -79,7 +80,27 @@ def create_app(config=Config):
     for code in (403, 404):
         app.register_error_handler(code, lambda e, code=code: (render_template("error.html", code=code, e=e), code))
 
+    _register_field_sync()
+
     if app.config["ENABLE_SCHEDULER"]:
         from .scheduler import start
         start(app)
     return app
+
+
+def _before_flush(session, flush_context, instances):
+    """Each saved entry gets the fields implied by its sub-disciplines (and never none)."""
+    from .models import Call
+    calls = [o for o in list(session.new) + list(session.dirty) if isinstance(o, Call)]
+    if calls:
+        with session.no_autoflush:
+            t = tax()
+            for c in calls:
+                sync_fields(c, t)
+
+
+def _register_field_sync():
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+    if not event.contains(Session, "before_flush", _before_flush):
+        event.listen(Session, "before_flush", _before_flush)

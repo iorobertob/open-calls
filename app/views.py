@@ -1,5 +1,6 @@
 import json
 import re
+from urllib.parse import urlencode
 from datetime import date
 from pathlib import Path
 
@@ -17,7 +18,7 @@ from .importer import apply_record
 from .messages import msg
 from .models import Call, CallChange, Series, SeriesFollow, Subscription, User, db, today
 from .search import Filters, run_search, sort_calls
-from .taxonomy import COUNTRIES, KINDS, TOPICS
+from .taxonomy import COUNTRIES, KINDS, TOPICS as SCREEN_TEMPLATE_TOPICS
 
 bp = Blueprint("main", __name__)
 
@@ -34,12 +35,32 @@ def _public_call(call_id):
 def index():
     lang = get_lang()
     f = Filters(request.args, current_user)
-    calls, kind_counts = run_search(f, lang)
+    calls, counts = run_search(f, lang, facets=True)
     countries = sorted({c.country_code for c in Call.query.with_entities(Call.country_code).distinct() if c.country_code},
                        key=lambda code: COUNTRIES.get(code, (0, 0, 0, code, code))[3 if lang == "lt" else 4])
     urgent = sum(1 for c in calls if c.phase() in ("due_today", "closing_soon"))
-    return render_template("index.html", calls=calls, f=f, kind_counts=kind_counts, countries=countries,
-                           urgent=urgent, query_string=request.query_string.decode())
+    args = request.args
+
+    def qs(drop=(), **changes):
+        """Link to the list with some parameters changed (empty value = removed), others kept."""
+        m = MultiDict(args)
+        for k in drop:
+            m.poplist(k)
+        for k, v in changes.items():
+            m.setlist(k, [] if v in (None, "") else [v])
+        q = urlencode(list(m.items(multi=True)))
+        return url_for(".index") + ("?" + q if q else "")
+
+    def qs_toggle(key, value):
+        m = MultiDict(args)
+        vals = m.getlist(key)
+        m.setlist(key, [v for v in vals if v != value] if value in vals else vals + [value])
+        q = urlencode(list(m.items(multi=True)))
+        return url_for(".index") + ("?" + q if q else "")
+
+    return render_template("index.html", calls=calls, f=f, kind_counts=counts["kind"], counts=counts,
+                           countries=countries, urgent=urgent, query_string=request.query_string.decode(),
+                           qs=qs, qs_toggle=qs_toggle)
 
 
 @bp.route("/call/<int:call_id>")
@@ -271,7 +292,8 @@ def api_export():
 # ---------------------------------------------------------------- TV screen
 
 SCREEN_KIND = {"journal": "conference", "works": "competition", "grant": "mobility", "other": "competition"}
-SCREEN_TOPICS = set(TOPICS) - {"musicology", "pedagogy", "theatre"}
+# the TV template knows only its own fixed topic list (taxonomy.TOPICS)
+SCREEN_TOPICS = set(SCREEN_TEMPLATE_TOPICS) - {"musicology", "pedagogy", "theatre"}
 
 
 @bp.route("/screen")

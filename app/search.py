@@ -1,4 +1,8 @@
-"""Search and filtering shared by the HTML list, the JSON API and the calendar exports."""
+"""Search and filtering shared by the HTML list, the JSON API and the calendar exports.
+
+Taxonomy filters narrow step by step: field (Music and Sound, Theatre, …) → category → sub-disciplines
+(several sub-disciplines = any of them). Counts for each level are computed with the levels below it
+removed, so the explorer always shows how many results each choice would give."""
 from collections import Counter
 from datetime import date
 
@@ -6,7 +10,7 @@ from sqlalchemy import or_
 
 from .importer import parse_date
 from .models import Call, Subscription
-from .taxonomy import TOPICS
+from .taxonomy import tax
 
 SHOW = {  # "show" filter -> phases included
     "active": {"due_today", "closing_soon", "open", "rolling", "upcoming"},
@@ -26,7 +30,8 @@ class Filters:
         self.q = (args.get("q") or "").strip()
         self.kinds = [k for k in args.getlist("kind") if k]
         self.topics = [t for t in args.getlist("topic") if t]
-        self.family = args.get("family") or ""
+        self.field = args.get("field") or ""
+        self.cat = args.get("cat") or args.get("family") or ""   # "family" = old links
         self.region = args.get("region") or ""
         self.country = (args.get("country") or "").upper()
         self.show = args.get("show") if args.get("show") in SHOW else "active"
@@ -41,7 +46,7 @@ class Filters:
 
     @property
     def is_default(self):
-        return not any([self.q, self.kinds, self.topics, self.family, self.region, self.country, self.date_from,
+        return not any([self.q, self.kinds, self.topics, self.field, self.cat, self.region, self.country, self.date_from,
                         self.date_to, self.star, self.remote, self.free, self.mine]) and self.show == "active"
 
 
@@ -51,8 +56,6 @@ def _base_query(f: Filters):
         for word in f.q.split():
             like = f"%{word}%"
             q = q.filter(or_(*[col.ilike(like) for col in TEXT_COLUMNS]))
-    for t in f.topics:
-        q = q.filter(Call.topics.like(f"%,{t},%"))
     if f.country:
         q = q.filter(Call.country_code == f.country)
     if f.star:
@@ -74,8 +77,6 @@ def _python_filters(calls, f: Filters, ref):
             continue
         if f.region and c.region != f.region:
             continue
-        if f.family and not any(TOPICS.get(t, ("",))[0] == f.family for t in c.topic_list):
-            continue
         if f.remote and not c.remote_possible:
             continue
         if f.free and not c.is_free:
@@ -94,11 +95,38 @@ def sort_calls(calls, how, lang="lt", ref=None):
     return sorted(calls, key=lambda c: (order.get(c.phase(ref), 5), c.key_date or date.max, not c.star))
 
 
-def run_search(f: Filters, lang="lt"):
-    """Returns (calls, kind_counts)."""
+def _in_field(c, f):
+    return not f.field or f.field in c.field_list
+
+
+def _in_cat(c, f, cat_topics):
+    return not f.cat or any(t in cat_topics for t in c.topic_list)
+
+
+def _in_topics(c, f):
+    return not f.topics or any(t in f.topics for t in c.topic_list)
+
+
+def run_search(f: Filters, lang="lt", facets=False):
+    """Returns (calls, kind_counts) — or, with facets=True, (calls, counts) where counts has
+    'kind', 'field', 'cat' and 'topic' Counters for the explorer."""
     ref = date.today()
     rows = _python_filters(_base_query(f).all(), f, ref)
-    kind_counts = Counter(c.kind for c in rows)
-    if f.kinds:
-        rows = [c for c in rows if c.kind in f.kinds]
-    return sort_calls(rows, f.sort, lang, ref), kind_counts
+    cat_topics = {d.key for d in tax().disciplines_in(f.cat)} if f.cat else set()
+    by_kind = [c for c in rows if not f.kinds or c.kind in f.kinds]
+    in_field = [c for c in by_kind if _in_field(c, f)]
+    in_cat = [c for c in in_field if _in_cat(c, f, cat_topics)]
+    result = [c for c in in_cat if _in_topics(c, f)]
+    kind_counts = Counter(c.kind for c in rows if _in_field(c, f) and _in_cat(c, f, cat_topics) and _in_topics(c, f))
+    if not facets:
+        return sort_calls(result, f.sort, lang, ref), kind_counts
+    t = tax()
+    cat_counts = Counter()
+    for c in in_field:
+        for k in {t.category_of(x).key for x in c.topic_list if t.category_of(x)}:
+            cat_counts[k] += 1
+    counts = {"kind": kind_counts, "all": len(by_kind),
+              "field": Counter(k for c in by_kind for k in c.field_list),
+              "cat": cat_counts,
+              "topic": Counter(x for c in in_cat for x in set(c.topic_list))}
+    return sort_calls(result, f.sort, lang, ref), counts

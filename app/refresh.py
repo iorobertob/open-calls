@@ -62,6 +62,15 @@ def archive_expired():
     return n
 
 
+def purge_old_logs(days=365):
+    from .models import EmailLog, Notification
+    cutoff = utcnow() - timedelta(days=days)
+    n = EmailLog.query.filter(EmailLog.at < cutoff).delete()
+    Notification.query.filter(Notification.sent_at < cutoff).delete()
+    db.session.commit()
+    return n
+
+
 def _set(call, attr, new, note):
     old = getattr(call, attr)
     if old == new:
@@ -170,7 +179,7 @@ def run_refresh(limit=None, use_llm=True):
     run = RefreshRun()
     db.session.add(run)
     db.session.commit()
-    lines = [f"archived: {archive_expired()}"]
+    lines = [f"archived: {archive_expired()}", f"old e-mail log entries removed: {purge_old_logs()}"]
     if use_llm and llm_available():
         from .translate import translate_missing
         lines.append(f"translated fields: {translate_missing(limit=cfg['TRANSLATE_BATCH'])}")

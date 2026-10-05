@@ -22,6 +22,8 @@ def app():
     app = create_app(TestConfig)
     with app.app_context():
         db.create_all()
+        from app.taxonomy import seed_defaults
+        seed_defaults()
         t = date.today()
         db.session.add_all([
             Call(title_en="Soon conf", kind="conference", status="open", deadline=t + timedelta(days=3),
@@ -123,7 +125,8 @@ def test_english_mode_has_no_lithuanian_ui(app):
     db.session.add(Call(title_en="Other", url="https://a.example/2", status="open"))   # → a suggested series group
     db.session.commit()
     for url in ["/", "/call/1", "/map", "/about", "/my", "/suggest", "/admin/", "/admin/call/1/edit", "/admin/users", "/nope",
-                f"/series/{s.id}", "/admin/series", f"/admin/series/{s.id}", "/admin/series/suggestions", "/admin/series/new"]:
+                f"/series/{s.id}", "/admin/series", f"/admin/series/{s.id}", "/admin/series/suggestions", "/admin/series/new",
+                "/admin/emails", "/admin/emails/test", "/?field=music&cat=compute"]:
         html = c.get(url).get_data(as_text=True)
         html = re.sub(r"<(script|textarea|input|option)[^>]*>.*?</\1>|<input[^>]*>", "", html, flags=re.S)
         text = re.sub(r"<[^>]+>", " ", html)
@@ -136,7 +139,7 @@ def _capture(monkeypatch):
     """Collect e-mails instead of sending them."""
     from app import notify
     sent = []
-    monkeypatch.setattr(notify.Mailer, "send", lambda self, to, subject, text, html, unsubscribe_url=None:
+    monkeypatch.setattr(notify.Mailer, "send", lambda self, to, subject, text, html, unsubscribe_url=None, **kw:
                         sent.append({"to": to, "subject": subject, "text": text, "html": html}))
     return sent
 
@@ -245,7 +248,7 @@ def test_recheck_never_overwrites_with_a_new_edition(app, monkeypatch):
     monkeypatch.setattr(refresh, "fetch", lambda url: page)
     monkeypatch.setattr(refresh, "llm_available", lambda: True)
     fake = {f: "" for f in __import__("app.extract", fromlist=["Extraction"]).Extraction.model_fields}
-    fake.update(is_call=True, status="open", kind="residency", title_en="Later residency 2028",
+    fake.update(is_call=True, status="open", kind="residency", title_en="Later residency 2028", fields=[],
                 deadline=(old_deadline + timedelta(days=365)).isoformat(), topics=[], star=False, confidence="high")
     from app.extract import Extraction
     monkeypatch.setattr(refresh, "extract_with_claude", lambda p, previous=None: Extraction(**fake))
@@ -265,7 +268,7 @@ def test_series_scan_creates_pending_entries(app, monkeypatch):
     db.session.add(s)
     db.session.commit()
     base = {f: "" for f in Extraction.model_fields} | {"is_call": True, "status": "open", "kind": "journal",
-                                                        "topics": [], "star": False, "confidence": "high"}
+                                                        "topics": [], "fields": [], "star": False, "confidence": "high"}
     found = [Extraction(**base | {"title_en": "Soundworks Vol. 9: Listening", "deadline": "2027-03-01",
                                    "url": "https://sw.example/cfp/vol9"}),
              Extraction(**base | {"title_en": "Soon conf", "deadline": "", "url": "https://a.example"})]  # already known
@@ -392,3 +395,146 @@ def test_admin_can_archive_and_delete(app):
     c.get("/auth/logout"); login(c, "student@lmta.lt")
     assert c.post("/admin/call/1/action", data={"action": "delete"}).status_code == 403
     assert db.session.get(Call, 1) is not None
+
+
+
+# ---------------------------------------------------------------- fields → categories → sub-disciplines
+
+def test_fields_follow_sub_disciplines(app):
+    c = Call(title_en="Film score lab", status="open", topics=",filmmusic,research,")
+    db.session.add(c)
+    db.session.commit()
+    assert c.field_list == ["cinema"]                       # implied by its sub-discipline
+    bare = Call(title_en="Something", status="open", topics=",research,")   # only a shared one
+    db.session.add(bare)
+    db.session.commit()
+    assert bare.field_list == ["music"]                      # never without a field
+    assert db.session.get(Call, 1).field_list == ["music"]  # "ai, paper" → music
+
+
+def test_explorer_filters_and_counts(app):
+    db.session.add(Call(title_en="Opera lab", status="open", topics=",opera,", url="https://o.example",
+                        deadline=date.today() + timedelta(days=20)))
+    db.session.commit()
+    c = app.test_client()
+    c.get("/lang/en")
+    home = c.get("/").get_data(as_text=True)
+    assert "Music and Sound" in home and "Theatre" in home and "Cinema" in home and "Dance and Performance" in home
+    theatre = c.get("/?field=theatre").get_data(as_text=True)
+    assert "Opera lab" in theatre and "Soon conf" not in theatre
+    assert "Music theatre &amp; opera" in theatre                # its categories appear
+    cat = c.get("/?field=music&cat=compute").get_data(as_text=True)
+    assert "Soon conf" in cat and "Later residency" not in cat and "generative AI" in cat   # sub-disciplines appear
+    both = c.get("/?cat=compute&topic=ai&topic=algorithmic").get_data(as_text=True)
+    assert "Soon conf" in both                                # several sub-disciplines = any of them
+    old = c.get("/?family=compute").get_data(as_text=True)     # old links still work
+    assert "Soon conf" in old and "Later residency" not in old
+
+
+def test_admin_edits_taxonomy(app):
+    from app.models import Category, Discipline, Field
+    c = app.test_client()
+    login(c)
+    post = lambda **d: c.post("/admin/taxonomy", data=d)
+    post(action="field_save", key="Bad Key!", name_en="X")
+    assert not Field.query.filter_by(name_en="X").first()             # invalid key refused
+    post(action="field_save", key="design", name_lt="Dizainas", name_en="Design", hue="30", position="9")
+    f = Field.query.filter_by(key="design").one()
+    post(action="cat_save", key="graphic", field_id=str(f.id), name_en="Graphic design", hue="40")
+    cat = Category.query.filter_by(key="graphic").one()
+    post(action="disc_save", key="typography", category_id=str(cat.id), name_lt="tipografija", name_en="typography")
+    d = Discipline.query.filter_by(key="typography").one()
+    post(action="disc_save", id=str(d.id), category_id=str(cat.id), name_lt="šriftai", name_en="type design")
+    assert db.session.get(Discipline, d.id).name_en == "type design"     # renamed, key kept
+    entry = db.session.get(Call, 2)
+    entry.topic_list = ["soundart", "typography"]
+    db.session.commit()
+    assert "design" in entry.field_list
+    # delete the sub-discipline, replacing it with another → entries updated
+    post(action="disc_delete", id=str(d.id), replace_with="mediaart")
+    db.session.refresh(entry)
+    assert entry.topic_list == ["soundart", "mediaart"] and not Discipline.query.filter_by(key="typography").first()
+    # delete the field: its categories become shared, entries lose the field
+    post(action="field_delete", id=str(f.id), move_to="")
+    db.session.refresh(entry)
+    assert "design" not in entry.field_list and Category.query.filter_by(key="graphic").one().field_id is None
+    # a category with sub-disciplines can't be deleted without a target
+    spatial = Category.query.filter_by(key="spatial").one()
+    post(action="cat_delete", id=str(spatial.id))
+    assert db.session.get(Category, spatial.id) is not None
+    c.get("/lang/en")
+    page = c.get("/admin/taxonomy").get_data(as_text=True)
+    assert "Music and Sound" in page and "Shared by all fields" in page
+
+
+# ---------------------------------------------------------------- e-mail log & test e-mails
+
+def test_email_log_records_every_attempt(app):
+    from app.models import EmailLog, Subscription
+    from app.notify import send_notifications
+    student = User(email="s@lmta.lt", lang="en")
+    db.session.add(student)
+    db.session.flush()
+    db.session.add(Subscription(user_id=student.id, call_id=1))       # deadline in 3 days → reminder due
+    db.session.commit()
+    send_notifications()
+    row = EmailLog.query.filter_by(to="s@lmta.lt").one()
+    assert row.status == "logged" and row.kind == "notifications" and "Soon conf" in row.body
+
+
+def test_smtp_failures_are_logged(app, monkeypatch):
+    import smtplib
+    from app import notify
+    from app.models import EmailLog
+
+    class Refuses:
+        def __init__(self, *a, **k): pass
+        def starttls(self): pass
+        def login(self, u, p): raise smtplib.SMTPAuthenticationError(535, b"Authentication failed")
+        def quit(self): pass
+    monkeypatch.setattr(smtplib, "SMTP", Refuses)
+    app.config.update(MAIL_BACKEND="smtp", SMTP_HOST="smtp.mailersend.net", SMTP_USERNAME="u", SMTP_PASSWORD="bad")
+    c = app.test_client()
+    login(c)
+    c.get("/lang/en")
+    r = c.post("/admin/emails/test", data={"to": "me@lmta.lt", "kind": "simple"}, follow_redirects=True)
+    assert "Sending failed: 535 Authentication failed" in r.get_data(as_text=True)
+    row = EmailLog.query.filter_by(status="failed").one()
+    assert "535" in row.error and "smtp.mailersend.net" in row.to
+    log_page = c.get("/admin/emails?status=failed").get_data(as_text=True)
+    assert "535 Authentication failed" in log_page
+
+
+def test_test_email_previews_do_not_change_state(app):
+    from app.models import EmailLog, ReminderSent, Subscription
+    student = User(email="s@lmta.lt", lang="en")
+    db.session.add(student)
+    db.session.flush()
+    db.session.add(Subscription(user_id=student.id, call_id=1))
+    db.session.commit()
+    c = app.test_client()
+    login(c)
+    c.get("/lang/en")
+    c.post("/admin/emails/test", data={"to": "me@lmta.lt", "kind": "user", "user_id": str(student.id)})
+    c.post("/admin/emails/test", data={"to": "me@lmta.lt", "kind": "admin"})
+    subjects = [e.subject for e in EmailLog.query.order_by(EmailLog.id).all()]
+    assert subjects[0].startswith("[TEST] Deadline reminder: Soon conf") and subjects[1].startswith("[TEST] MISC open calls")
+    assert ReminderSent.query.count() == 0                     # nothing marked as sent
+    assert "Send a test e-mail" in c.get("/admin/emails/test").get_data(as_text=True)
+
+
+def test_classify_adds_fields_only(app, monkeypatch):
+    from app import classify
+    call = db.session.get(Call, 2)
+
+    class Resp:
+        stop_reason = "end_turn"
+    def fake(**kw):
+        Result = kw["output_format"]
+        r = Resp()
+        r.parsed_output = Result(items=[{"id": 2, "fields": ["dance"]}, {"id": 1, "fields": ["music"]}])
+        return r
+    monkeypatch.setattr(classify, "parse_with_fallback", fake)
+    changes = classify.classify_all()
+    db.session.refresh(call)
+    assert changes == [(2, "Later residency", ["dance"])] and call.field_list == ["music", "dance"]

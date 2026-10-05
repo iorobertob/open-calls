@@ -14,6 +14,9 @@ def register(app):
     def init_db(seed):
         """Create tables (dev convenience; use `flask db upgrade` in production) and seed."""
         db.create_all()
+        from .taxonomy import seed_defaults
+        if seed_defaults():
+            click.echo("Fields, categories and sub-disciplines created.")
         click.echo("Tables created.")
         if seed and not Call.query.first():
             _import_files(sorted(SEED.glob("*.json")), drop_expired=False)
@@ -105,6 +108,22 @@ def register(app):
             click.echo("SMTP_HOST is not set — the test e-mail is only written to the log.")
         send_test(to)
         click.echo(f"sent to {to}")
+
+    @app.cli.command("classify-fields")
+    @click.option("--dry-run", is_flag=True, help="Show the suggestions without saving")
+    @click.option("--limit", type=int, default=None)
+    def classify_fields(dry_run, limit):
+        """Ask Claude which fields (Music and Sound, Theatre, Cinema, Dance and Performance) each entry
+        belongs to. Fields are only ADDED, never removed; every change is logged in the entry's history."""
+        from .classify import classify_all
+        from .extract import llm_available
+        if not llm_available():
+            raise click.ClickException("Set ANTHROPIC_API_KEY first.")
+        changes = classify_all(dry_run=dry_run, limit=limit,
+                               progress=lambda done, total: click.echo(f"  {done}/{total} entries"))
+        for cid, title, added in changes:
+            click.echo(f"#{cid} {title[:70]}: + {', '.join(added)}")
+        click.echo(f"{'would change' if dry_run else 'changed'}: {len(changes)} entries")
 
     @app.cli.command("make-admin")
     @click.argument("email")

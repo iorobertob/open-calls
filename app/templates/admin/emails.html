@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ _("E-mails") }}{% endblock %}
+{% set KIND = {'notifications': 'Daily e-mail', 'admin_digest': 'Admin digest', 'test': 'Test', 'other': 'Other'} %}
+{% set STATUS = {'sent': 'Sent', 'failed': 'Failed', 'logged': 'Log only'} %}
+{% block content %}
+<p class="back"><a href="{{ url_for('admin.dashboard') }}">← {{ _("Admin") }}</a></p>
+<h1>{{ _("E-mails") }}</h1>
+<div class="stats">
+  {% for s in ('sent', 'failed', 'logged') %}<a class="stat" href="{{ url_for('admin.emails', status=s) }}"><b>{{ counts[s] }}</b>{{ _(STATUS[s]) }}</a>{% endfor %}
+  <a class="stat" href="{{ url_for('admin.email_test') }}"><b>✉</b>{{ _("Send a test e-mail") }}</a>
+</div>
+<form method="get" class="filters inline-filters">
+  <input type="search" name="q" value="{{ who }}" placeholder="{{ _('Recipient or subject…') }}">
+  <select name="status"><option value="">{{ _("Any status") }}</option>{% for k, v in STATUS.items() %}<option value="{{ k }}" {{ 'selected' if status == k }}>{{ _(v) }}</option>{% endfor %}</select>
+  <select name="kind"><option value="">{{ _("Any type") }}</option>{% for k, v in KIND.items() %}<option value="{{ k }}" {{ 'selected' if kind == k }}>{{ _(v) }}</option>{% endfor %}</select>
+  <button class="btn">{{ _("Filter") }}</button>
+</form>
+<section class="panel">
+<table class="adm maillog">
+  <tr><th>{{ _("When") }}</th><th>{{ _("To") }}</th><th>{{ _("Subject") }}</th><th>{{ _("Type") }}</th><th>{{ _("Status") }}</th></tr>
+  {% for e in rows %}
+  <tr>
+    <td><small>{{ e.at.strftime('%Y-%m-%d %H:%M') }}</small></td>
+    <td>{{ e.to }}</td>
+    <td><a href="{{ url_for('admin.email_detail', email_id=e.id) }}">{{ e.subject|truncate(80) }}</a>{% if e.error %}<br><small class="err">{{ e.error|truncate(140) }}</small>{% endif %}</td>
+    <td><small>{{ _(KIND.get(e.kind, 'Other')) }}</small></td>
+    <td><span class="badge st-{{ e.status }}">{{ _(STATUS.get(e.status, e.status)) }}</span></td>
+  </tr>
+  {% else %}<tr><td colspan="5">{{ _("No e-mails yet.") }}</td></tr>{% endfor %}
+</table>
+{% if pages > 1 %}<p class="acts">{% if page > 1 %}<a class="btn ghost" href="{{ url_for('admin.emails', page=page-1, status=status, kind=kind, q=who) }}">←</a>{% endif %}
+  <span class="hint">{{ page }} / {{ pages }} ({{ total }})</span>
+  {% if page < pages %}<a class="btn ghost" href="{{ url_for('admin.emails', page=page+1, status=status, kind=kind, q=who) }}">→</a>{% endif %}</p>{% endif %}
+</section>
+<p class="hint">{{ _("Entries older than one year are removed automatically.") }}</p>
+{% endblock %}

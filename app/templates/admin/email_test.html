@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Send a test e-mail") }}{% endblock %}
+{% block content %}
+<p class="back"><a href="{{ url_for('admin.emails') }}">← {{ _("E-mails") }}</a></p>
+<h1>{{ _("Send a test e-mail") }}</h1>
+<div class="admin-grid">
+  <section class="panel">
+    <h2>{{ _("Mail server settings") }}</h2>
+    <dl class="facts compact">
+      <dt>{{ _("Sending") }}</dt><dd>{% if smtp.backend == 'smtp' %}<span class="badge st-sent">SMTP</span>{% else %}<span class="badge st-logged">{{ _("Log only — SMTP_HOST is not set") }}</span>{% endif %}</dd>
+      <dt>{{ _("Server") }}</dt><dd>{{ smtp.host or '—' }}:{{ smtp.port }} {{ '(STARTTLS)' if smtp.starttls and smtp.port != 465 else ('(SSL)' if smtp.port == 465 else '') }}</dd>
+      <dt>{{ _("Login") }}</dt><dd>{{ smtp.user or '—' }} · {{ _("password set") if smtp.password_set else _("no password") }}</dd>
+      <dt>{{ _("Sender") }}</dt><dd>{{ smtp.from }}</dd>
+      {% if smtp.reply_to %}<dt>Reply-To</dt><dd>{{ smtp.reply_to }}</dd>{% endif %}
+    </dl>
+    <p class="hint">{{ _("These come from .env on the server (SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, MAIL_FROM). After changing them, restart the app.") }}</p>
+  </section>
+  <section class="panel">
+    <h2>{{ _("Send") }}</h2>
+    <form method="post" class="stack" id="testform">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label>{{ _("To") }}<input type="email" name="to" required value="{{ user.email }}"></label>
+      <label class="inline"><input type="radio" name="kind" value="simple" checked> {{ _("Simple test message") }}</label>
+      <label class="inline"><input type="radio" name="kind" value="user"> {{ _("Preview a user's daily e-mail (reminders, series news)") }}</label>
+      <label class="indent">{{ _("Whose") }}
+        <select name="user_id"><option value="">—</option>{% for u in users %}<option value="{{ u.id }}">{{ u.email }} ({{ u.subscriptions|length }} / {{ u.follows|length }})</option>{% endfor %}</select></label>
+      <label class="inline"><input type="radio" name="kind" value="admin"> {{ _("Preview the admin digest (everything currently waiting)") }}</label>
+      <p class="hint">{{ _("Previews are marked [TEST] and don't change anything: reminders are not marked as sent.") }}</p>
+      <div><button class="btn primary">✉ {{ _("Send test e-mail") }}</button></div>
+    </form>
+  </section>
+</div>
+<section class="panel">
+  <h2>{{ _("Recent tests") }}</h2>
+  <table class="adm maillog">{% for e in recent %}
+    <tr><td><small>{{ e.at.strftime('%Y-%m-%d %H:%M') }}</small></td><td>{{ e.to }}</td>
+      <td><a href="{{ url_for('admin.email_detail', email_id=e.id) }}">{{ e.subject|truncate(70) }}</a>{% if e.error %}<br><small class="err">{{ e.error }}</small>{% endif %}</td>
+      <td><span class="badge st-{{ e.status }}">{{ e.status }}</span></td></tr>
+  {% else %}<tr><td>—</td></tr>{% endfor %}</table>
+</section>
+{% endblock %}

@@ -23,7 +23,7 @@
   {% for s, n in stats.items() %}<a class="stat" href="{{ url_for('main.index', show={'open':'open','watch':'upcoming','reject':'rejected','archived':'closed'}.get(s, 'all')) }}"><b>{{ n }}</b>{{ _(STATUS_LABELS[s]) }}</a>{% endfor %}
   <span class="stat"><b>{{ _("on") if llm else _("off") }}</b>Claude API</span>
   <span class="stat"><b>{{ untranslated }}</b>{{ _("Untranslated entries") }}</span>
-  <span class="stat"><b>{{ 'SMTP' if mail_backend == 'smtp' else _('log only') }}</b>{{ _("E-mail") }}</span>
+  <a class="stat" href="{{ url_for('admin.emails') }}"><b>{{ 'SMTP' if mail_backend == 'smtp' else _('log only') }}</b>{{ _("E-mail") }}</a>
 </div>
 
 <div class="admin-grid">
@@ -38,7 +38,9 @@
       <button class="btn primary">{{ _("Extract & review") }}</button>
     </form>
     <p><a href="{{ url_for('admin.new') }}">+ {{ _("Add manually") }}</a> · <a href="{{ url_for('admin.users') }}">{{ _("Users") }}</a>
-      · <a href="{{ url_for('admin.series_list') }}">↻ {{ _("Series") }} ({{ series_count }})</a>{% if suggestions %} · <a href="{{ url_for('admin.series_suggestions') }}">{{ _("Suggested series") }} ({{ suggestions }})</a>{% endif %}</p>
+      · <a href="{{ url_for('admin.series_list') }}">↻ {{ _("Series") }} ({{ series_count }})</a>
+      · <a href="{{ url_for('admin.taxonomy') }}">{{ _("Fields & disciplines") }}</a>
+      · <a href="{{ url_for('admin.emails') }}">✉ {{ _("E-mails") }}</a>{% if suggestions %} · <a href="{{ url_for('admin.series_suggestions') }}">{{ _("Suggested series") }} ({{ suggestions }})</a>{% endif %}</p>
   </section>
   <section class="panel">
     <h2>{{ _("Import weekly list") }}</h2>

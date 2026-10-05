@@ -12,7 +12,7 @@ from config import Config
 
 from .i18n import get_lang, tr
 from .messages import render as render_msg
-from .models import URGENT_DAYS, db
+from .models import URGENT_DAYS, Series, db
 from .taxonomy import COUNTRIES, FAMILIES, KIND_ORDER, KINDS, REGIONS, TOPICS, country_name, topic_label
 
 csrf = CSRFProtect()
@@ -49,7 +49,8 @@ def create_app(config=Config):
         lang = get_lang()
         return dict(lang=lang, _=lambda s: tr(s, lang), KINDS=KINDS, KIND_ORDER=KIND_ORDER, TOPICS=TOPICS,
                     FAMILIES=FAMILIES, REGIONS=REGIONS, COUNTRIES=COUNTRIES, topic_label=topic_label,
-                    country_name=country_name, today=date.today(), URGENT_DAYS=URGENT_DAYS, user=current_user)
+                    country_name=country_name, today=date.today(), URGENT_DAYS=URGENT_DAYS, user=current_user,
+                    SERIES_ALL=lambda: Series.query.order_by(Series.name_en).all())
 
     @app.template_filter("fmtdate")
     def fmtdate(d, lang="lt"):

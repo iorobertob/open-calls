@@ -15,12 +15,22 @@
   </div>
 </section>
 <section class="panel">
-  <h2>{{ _("Email reminders") }}</h2>
-  <form method="post" action="{{ url_for('main.reminder_settings') }}" class="acts">
+  <h2>{{ _("E-mail notifications") }}</h2>
+  <form method="post" action="{{ url_for('main.reminder_settings') }}" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label class="inline"><input type="checkbox" name="email_reminders" {{ 'checked' if user.email_reminders }}> {{ _("Email me 7 days before the deadline of each call I subscribe to") }}</label>
-    <button class="btn">{{ _("Save") }}</button>
+    <label class="inline"><input type="checkbox" name="email_reminders" {{ 'checked' if user.email_reminders }}> {{ _("Deadline reminders for calls I subscribe to (from one month before, then weekly) and changes to them") }}</label>
+    <label class="inline"><input type="checkbox" name="email_series" {{ 'checked' if user.email_series }}> {{ _("New calls in series I follow") }}</label>
+    {% if user.is_admin %}<label class="inline"><input type="checkbox" name="email_admin" {{ 'checked' if user.email_admin }}> {{ _("Admin: daily digest of entries waiting for review") }}</label>{% endif %}
+    <p class="hint">{{ _("At most one e-mail per day, bundling everything.") }}</p>
+    <div><button class="btn">{{ _("Save") }}</button></div>
   </form>
+</section>
+<section class="panel">
+  <h2>{{ _("Series I follow") }}</h2>
+  {% if user.follows %}
+  <ul class="plain">{% for f in user.follows %}<li class="row"><a href="{{ url_for('main.series_page', series_id=f.series.id) }}">↻ {{ f.series.name(lang) }}</a>
+    {{ m.follow_button(f.series, request.path) }}</li>{% endfor %}</ul>
+  {% else %}<p class="hint">{{ _("You don't follow any series yet. On a call's page, use “Follow series” to hear about future calls of the same journal, conference or festival.") }}</p>{% endif %}
 </section>
 <div class="cards">
   {% for c in calls %}{{ m.card(c, request.path) }}{% else %}<p class="empty">{{ _("You have no subscriptions yet.") }} <a href="{{ url_for('main.index') }}">{{ _("Open calls") }} →</a></p>{% endfor %}

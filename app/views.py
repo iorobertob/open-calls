@@ -15,7 +15,7 @@ from .i18n import get_lang, tr
 from .ics import ics_response
 from .importer import apply_record
 from .messages import msg
-from .models import Call, CallChange, Subscription, User, db, today
+from .models import Call, CallChange, Series, SeriesFollow, Subscription, User, db, today
 from .search import Filters, run_search, sort_calls
 from .taxonomy import COUNTRIES, KINDS, TOPICS
 
@@ -110,9 +110,53 @@ def my():
 @login_required
 def reminder_settings():
     current_user.email_reminders = request.form.get("email_reminders") == "on"
+    current_user.email_series = request.form.get("email_series") == "on"
+    if current_user.is_admin:
+        current_user.email_admin = request.form.get("email_admin") == "on"
     db.session.commit()
-    flash(tr("Reminder settings saved."), "ok")
+    flash(tr("E-mail settings saved."), "ok")
     return redirect(url_for(".my"))
+
+
+@bp.route("/email/stop/<token>", methods=["GET", "POST"])
+def email_stop(token):
+    """One-click 'stop all e-mails' link in every e-mail (works without logging in)."""
+    from .notify import user_from_stop_token
+    user = user_from_stop_token(token)
+    if not user:
+        abort(404)
+    if request.method == "POST":
+        user.email_reminders = user.email_series = user.email_admin = False
+        db.session.commit()
+        return render_template("email_stop.html", done=True)
+    return render_template("email_stop.html", done=False, email=user.email)
+
+
+@bp.route("/series/<int:series_id>")
+def series_page(series_id):
+    s = db.get_or_404(Series, series_id)
+    calls = [c for c in s.calls if c.status not in ("pending", "reject")]
+    live = sort_calls([c for c in calls if c.phase() != "closed"], "deadline", get_lang())
+    past = sorted([c for c in calls if c.phase() == "closed"], key=lambda c: c.key_date or date.min, reverse=True)
+    return render_template("series.html", s=s, live=live, past=past)
+
+
+@bp.route("/series/<int:series_id>/follow", methods=["POST"])
+@login_required
+def follow(series_id):
+    s = db.get_or_404(Series, series_id)
+    if not current_user.is_following(s):
+        db.session.add(SeriesFollow(user_id=current_user.id, series_id=s.id))
+        db.session.commit()
+    return redirect(safe_next(request.form.get("next"), url_for(".series_page", series_id=s.id)))
+
+
+@bp.route("/series/<int:series_id>/unfollow", methods=["POST"])
+@login_required
+def unfollow(series_id):
+    SeriesFollow.query.filter_by(user_id=current_user.id, series_id=series_id).delete()
+    db.session.commit()
+    return redirect(safe_next(request.form.get("next"), url_for(".series_page", series_id=series_id)))
 
 
 @bp.route("/my/reset-feed", methods=["POST"])
@@ -137,6 +181,8 @@ def suggest():
                  source=msg("suggested_by", email=current_user.email), url=url)
         apply_record(c, to_record(data))
         c.status = "pending"
+        from .series import link_series
+        link_series(c)
         db.session.add(c)
         db.session.flush()
         comment = (request.form.get("comment") or "").strip()
@@ -215,7 +261,7 @@ def api_calls():
 def api_export():
     """All current open / watch / reject entries in the curator's weekly schema (schema 1)."""
     calls = Call.query.filter(Call.status.in_(["open", "watch", "reject"])).all()
-    calls = [c for c in calls if c.phase() != "closed"]
+    calls = [c for c in calls if c.phase() != "closed" and not c.is_placeholder]
     body = {"schema": 1, "generated": date.today().isoformat(),
             "rules": "status: open|watch|reject. Exported from the MISC open calls app.",
             "calls": [c.to_dict() for c in sort_calls(calls, "deadline")]}

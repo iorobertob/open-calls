@@ -196,3 +196,14 @@ table.adm td.acts{justify-content:flex-end;white-space:nowrap}
 @keyframes modal-in{from{opacity:0;transform:translateY(6px) scale(.98)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.modal[open]{animation:none}}
 .btn.danger-solid{background:var(--urg);border-color:var(--urg);color:#fff}
+
+/* series */
+.series-tag{font-size:12.5px;margin:2px 0 1px}.series-tag a{color:var(--mut);text-decoration:none;font-weight:600}
+.series-tag a:hover{color:var(--acc)}
+.seriesbox{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;background:var(--soft);border-radius:12px;padding:12px 14px;margin:14px 0}
+.seriesbox small{display:block;color:var(--mut);font-size:13px}
+.serieshead{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.serieshead .kind{color:hsl(var(--kh) var(--ks) var(--kl))}
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+ul.plain li.row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+select[multiple]{min-height:200px}

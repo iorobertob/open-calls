@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ s.name(lang) or _("New series") }}{% endblock %}
+{% set REC = [('yearly', 'Yearly'), ('twice_yearly', 'Twice a year'), ('rolling', 'Rolling (always open)'), ('irregular', 'Irregular')] %}
+{% block content %}
+<p class="back"><a href="{{ url_for('admin.series_list') }}">← {{ _("Series") }}</a></p>
+<h1>{{ s.name(lang) or _("New series") }}</h1>
+<form method="post" class="editform">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <fieldset><legend>{{ _("Basics") }}</legend>
+    <label>{{ _("Name (LT)") }}<input name="name_lt" value="{{ s.name_lt or '' }}"></label>
+    <label>{{ _("Name (EN)") }}<input name="name_en" value="{{ s.name_en or '' }}"></label>
+    <label>{{ _("Type") }}<select name="kind">{% for k in KIND_ORDER %}<option value="{{ k }}" {{ 'selected' if s.kind == k }}>{{ KINDS[k][lang] }}</option>{% endfor %}</select></label>
+    <label>{{ _("Organiser") }}<input name="org" value="{{ s.org or '' }}"></label>
+    <label class="wide">{{ _("Page where new calls appear (checked weekly)") }}<input type="url" name="url" value="{{ s.url or '' }}" placeholder="https://"></label>
+    <label>{{ _("How often") }}<select name="recurrence">{% for k, v in REC %}<option value="{{ k }}" {{ 'selected' if s.recurrence == k }}>{{ _(v) }}</option>{% endfor %}</select></label>
+    <label>{{ _("Usual month of the call (optional)") }}<select name="typical_month"><option value="">{{ _("Work it out from past calls") }}</option>
+      {% for i in range(1, 13) %}<option value="{{ i }}" {{ 'selected' if s.typical_month == i }}>{{ i }}</option>{% endfor %}</select></label>
+    <label class="inline"><input type="checkbox" name="active" {{ 'checked' if s.active }}> {{ _("Active (check weekly, keep an “expected next call” entry)") }}</label>
+  </fieldset>
+  {% if s.id %}{% set nxt = expected(s) %}
+  <p class="hint">{% if nxt %}{{ _("Next call expected around") }} <b>{{ nxt.strftime('%Y-%m') }}</b>. {% endif %}
+    {{ _("Last checked") }}: {{ s.last_checked_at.strftime('%Y-%m-%d %H:%M') if s.last_checked_at else '—' }}{% if s.last_found_at %} · {{ _("last new call found") }}: {{ s.last_found_at.strftime('%Y-%m-%d') }}{% endif %}</p>{% endif %}
+  <div class="acts"><button class="btn primary">{{ _("Save") }}</button></div>
+</form>
+
+{% if s.id %}
+<section class="panel">
+  <h2>{{ _("Calls in this series") }} ({{ s.calls|length }})</h2>
+  <table class="adm">{% for c in s.calls %}
+    <tr><td>{% if c.is_placeholder %}<i>{{ c.title(lang) }}</i> <small class="hint">({{ _("expected next call — created automatically") }})</small>
+        {% else %}<a href="{{ url_for('main.detail', call_id=c.id) }}">{{ c.title(lang) }}</a>{% endif %}<br>
+        <small>{{ c.deadline or c.deadline_word(lang) or '—' }} · {{ c.status }}</small></td>
+      <td class="acts"><form method="post" action="{{ url_for('admin.series_action', series_id=s.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="unlink"><input type="hidden" name="call_id" value="{{ c.id }}">
+        <button class="btn ghost">{{ _("Remove from series") }}</button></form></td></tr>
+  {% else %}<tr><td>—</td></tr>{% endfor %}</table>
+  <details><summary class="hint">{{ _("Add existing entries to this series") }}</summary>
+    <form method="post" action="{{ url_for('admin.series_action', series_id=s.id) }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="link">
+      <select name="call_id" multiple size="10">{% for c in unlinked %}<option value="{{ c.id }}">#{{ c.id }} {{ c.title(lang)|truncate(90) }} ({{ c.deadline or c.status }})</option>{% endfor %}</select>
+      <div><button class="btn">{{ _("Add selected") }}</button> <small class="hint">{{ _("Cmd/Ctrl-click to select several") }}</small></div>
+    </form>
+  </details>
+</section>
+<section class="panel">
+  <div class="acts">
+    <form method="post" action="{{ url_for('admin.series_action', series_id=s.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="check"><button class="btn">{{ _("Check the series page now") }}</button></form>
+    <form method="post" action="{{ url_for('admin.series_action', series_id=s.id) }}" data-confirm="{{ _('Delete this series? Its entries are kept, only the grouping is removed.') }}" data-confirm-ok="{{ _('Delete') }}" data-danger>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="delete"><button class="btn danger">{{ _("Delete series") }}</button></form>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

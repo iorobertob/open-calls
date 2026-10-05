@@ -22,7 +22,6 @@ def today():
 # Curator workflow statuses (same as the weekly JSON data block) plus moderation states.
 STATUSES = ("open", "watch", "reject", "pending", "archived")
 
-# Display phases, computed from dates on every request so the UI is always current.
 # Detail fields stored as <name> (Lithuanian) + <name>_en (English).
 DETAIL_FIELDS = ("kam_tinka", "nauda", "mokestis", "amzius", "padengiama", "nuotoliu", "registracija",
                  "studentu_nuolaida", "note")
@@ -33,6 +32,7 @@ SINGLE_PAIRS = DETAIL_FIELDS + NAME_FIELDS
 # Short bilingual pairs stored as <name>_lt / <name>_en.
 PAIR_FIELDS = ("title", "desc", "city", "country", "deadline_word")
 
+# Display phases, computed from dates on every request so the UI is always current.
 PHASES = ("due_today", "closing_soon", "open", "rolling", "upcoming", "closed", "rejected", "pending")
 
 
@@ -96,6 +96,12 @@ class Call(db.Model):
     updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
     submitted_by_id = db.Column(db.Integer, db.ForeignKey("user.id"))
 
+    # Series (the recurring source this call belongs to) and lifecycle flags
+    series_id = db.Column(db.Integer, db.ForeignKey("series.id"), index=True)
+    is_placeholder = db.Column(db.Boolean, default=False, nullable=False, server_default=db.false())
+    announced_at = db.Column(db.DateTime)       # followers of the series were told about this call
+    admin_notified_at = db.Column(db.DateTime)  # included in an admin digest e-mail
+
     # Automatic monitoring
     last_checked_at = db.Column(db.DateTime)
     last_http_status = db.Column(db.Integer)
@@ -107,6 +113,7 @@ class Call(db.Model):
                               order_by="CallChange.at.desc()")
     subscriptions = db.relationship("Subscription", backref="call", cascade="all, delete-orphan")
     reminders = db.relationship("ReminderSent", cascade="all, delete-orphan")
+    notifications = db.relationship("Notification", cascade="all, delete-orphan")
 
     # ---- helpers
     @property
@@ -156,6 +163,11 @@ class Call(db.Model):
             if bool(va) != bool(vb) and "⟦" not in va + vb:
                 out.append((a, b))
         return out
+
+    @property
+    def is_active(self):
+        """Published and not over (what visitors see in the lists)."""
+        return self.status in ("open", "watch") and self.phase() not in ("closed",)
 
     @property
     def region(self):
@@ -253,15 +265,21 @@ class User(UserMixin, db.Model):
     ms_tid = db.Column(db.String(64))
     is_admin = db.Column(db.Boolean, default=False)
     lang = db.Column(db.String(2), default="lt")
-    email_reminders = db.Column(db.Boolean, default=True, nullable=False, server_default=db.true())
+    email_reminders = db.Column(db.Boolean, default=True, nullable=False, server_default=db.true())  # deadlines + changes
+    email_series = db.Column(db.Boolean, default=True, nullable=False, server_default=db.true())     # new calls in followed series
+    email_admin = db.Column(db.Boolean, default=True, nullable=False, server_default=db.true())      # admin digest (admins only)
     calendar_token = db.Column(db.String(64), unique=True, default=lambda: secrets.token_urlsafe(24))
     created_at = db.Column(db.DateTime, default=utcnow)
     last_login_at = db.Column(db.DateTime)
 
     subscriptions = db.relationship("Subscription", backref="user", cascade="all, delete-orphan")
+    follows = db.relationship("SeriesFollow", backref="user", cascade="all, delete-orphan")
 
     def is_subscribed(self, call):
         return any(s.call_id == call.id for s in self.subscriptions)
+
+    def is_following(self, series):
+        return series is not None and any(f.series_id == series.id for f in self.follows)
 
 
 class Subscription(db.Model):
@@ -273,14 +291,60 @@ class Subscription(db.Model):
 
 
 class ReminderSent(db.Model):
-    """One row per (user, call, kind) so a reminder is never sent twice."""
+    """Log of deadline reminders: decides when the next one is due (first ~1 month before, then weekly)."""
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
     call_id = db.Column(db.Integer, db.ForeignKey("call.id", ondelete="CASCADE"), nullable=False, index=True)
     kind = db.Column(db.String(24), default="deadline_7d")
     deadline = db.Column(db.Date)  # if the deadline moves, a new reminder is due
     sent_at = db.Column(db.DateTime, default=utcnow)
-    __table_args__ = (db.UniqueConstraint("user_id", "call_id", "kind", "deadline"),)
+
+
+class Series(db.Model):
+    """A recurring source of calls — a journal, a conference, a festival, a residency programme.
+    Its page is watched weekly; each edition / theme is a separate Call linked to it."""
+    id = db.Column(db.Integer, primary_key=True)
+    name_lt = db.Column(db.String(300), default="")
+    name_en = db.Column(db.String(300), default="")
+    kind = db.Column(db.String(24), default="other")
+    org = db.Column(db.String(400), default="")
+    url = db.Column(db.String(1000), default="")          # the page where new calls appear
+    recurrence = db.Column(db.String(16), default="yearly")  # yearly | twice_yearly | rolling | irregular
+    typical_month = db.Column(db.Integer)                 # month a new call usually appears (1–12), optional
+    active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow)
+    last_checked_at = db.Column(db.DateTime)
+    last_http_status = db.Column(db.Integer)
+    content_hash = db.Column(db.String(64))
+    last_found_at = db.Column(db.DateTime)                # a new call was detected on the page
+
+    calls = db.relationship("Call", backref="series", order_by="Call.deadline.desc()")
+    followers = db.relationship("SeriesFollow", backref="series", cascade="all, delete-orphan")
+
+    def name(self, lang):
+        return (self.name_lt if lang == "lt" else self.name_en) or self.name_en or self.name_lt
+
+
+class SeriesFollow(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    series_id = db.Column(db.Integer, db.ForeignKey("series.id"), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=utcnow)
+    __table_args__ = (db.UniqueConstraint("user_id", "series_id"),)
+
+
+class Notification(db.Model):
+    """Outbox: events waiting to be e-mailed (bundled into one daily e-mail per user).
+    kind: series_new (a followed series published a call) | call_changed (a subscribed call changed)."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, index=True)
+    call_id = db.Column(db.Integer, db.ForeignKey("call.id"), index=True)
+    kind = db.Column(db.String(24), nullable=False)
+    detail = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=utcnow)
+    sent_at = db.Column(db.DateTime, index=True)
+    user = db.relationship("User")
+    call = db.relationship("Call", overlaps="notifications")
 
 
 class RefreshRun(db.Model):

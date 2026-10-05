@@ -1,8 +1,8 @@
 [Unit]
-Description=Daily deadline reminders for MISC open calls
+Description=Daily e-mail notifications for MISC open calls
 
 [Timer]
-# after the refresh (so deadlines are current), during working hours
+# during working hours (the Monday refresh runs at 03:15, so Monday e-mails include its results)
 OnCalendar=*-*-* 09:00:00 Europe/Vilnius
 Persistent=true
 

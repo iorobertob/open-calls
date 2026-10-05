@@ -1,8 +1,8 @@
 [Unit]
-Description=Daily refresh of MISC open calls
+Description=Weekly refresh of MISC open calls (Monday night)
 
 [Timer]
-OnCalendar=*-*-* 04:15:00 Europe/Vilnius
+OnCalendar=Mon *-*-* 03:15:00 Europe/Vilnius
 Persistent=true
 RandomizedDelaySec=10min
 

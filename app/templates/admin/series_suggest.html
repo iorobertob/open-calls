@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Suggested series") }}{% endblock %}
+{% block content %}
+<p class="back"><a href="{{ url_for('admin.series_list') }}">← {{ _("Series") }}</a></p>
+<h1>{{ _("Suggested series") }}</h1>
+<p class="hint">{{ _("Entries without a series, grouped by website. Untick entries that don't belong, check the name, and create the series.") }}</p>
+{% for host, calls in groups %}
+<section class="panel">
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <h2>{{ host }} <small class="hint">({{ calls|length }})</small></h2>
+    {% for c in calls %}<label class="inline"><input type="checkbox" name="call_id" value="{{ c.id }}" checked> {{ c.title(lang) }} <small class="hint">{{ c.deadline or c.status }}</small></label>{% endfor %}
+    <div class="grid2">
+      <label>{{ _("Name (LT)") }}<input name="name_lt" value="{{ name_from(calls[0], 'lt') }}"></label>
+      <label>{{ _("Name (EN)") }}<input name="name_en" value="{{ name_from(calls[0], 'en') }}"></label>
+      <label>{{ _("Page where new calls appear (checked weekly)") }}<input type="url" name="url" value="{{ calls[0].url }}"></label>
+      <label>{{ _("How often") }}<select name="recurrence"><option value="yearly">{{ _("Yearly") }}</option><option value="twice_yearly">{{ _("Twice a year") }}</option><option value="irregular">{{ _("Irregular") }}</option><option value="rolling">{{ _("Rolling (always open)") }}</option></select></label>
+    </div>
+    <div><button class="btn primary">{{ _("Create series") }}</button></div>
+  </form>
+</section>
+{% else %}<p class="empty">{{ _("No suggestions — every website with several entries already has a series.") }}</p>{% endfor %}
+{% endblock %}

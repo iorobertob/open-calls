@@ -1,6 +1,7 @@
-# Email subscribed users about deadlines REMINDER_DAYS_BEFORE days away (MailerLite)
+# Daily e-mails over SMTP: deadline reminders (1 month before, then weekly), new calls in followed
+# series, changes to subscribed calls, and the admin digest of entries to review
 [Unit]
-Description=MISC open calls: deadline reminder emails
+Description=MISC open calls: daily e-mail notifications
 
 [Service]
 Type=oneshot
@@ -9,4 +10,4 @@ WorkingDirectory=__APP_DIR__
 EnvironmentFile=__APP_DIR__/.env
 Environment=FLASK_APP=wsgi.py
 Environment=PYTHONDONTWRITEBYTECODE=1
-ExecStart=__APP_DIR__/.venv/bin/flask send-reminders
+ExecStart=__APP_DIR__/.venv/bin/flask send-notifications

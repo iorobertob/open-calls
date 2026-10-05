@@ -25,6 +25,22 @@
   {% endif %}
 {%- endmacro %}
 
+{% macro follow_button(series, next_url, compact=False) -%}
+  {% if series %}
+    {% if user.is_authenticated %}
+      {% set on = user.is_following(series) %}
+      <form method="post" action="{{ url_for('main.unfollow' if on else 'main.follow', series_id=series.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="{{ next_url }}">
+        <button class="btn {{ 'on' if on else '' }}" title="{{ _('Get an e-mail when this series publishes a new call') }}">
+          {{ ('✓ ' ~ _('Following')) if on else ('＋ ' ~ (_('Follow') if compact else _('Follow series'))) }}</button>
+      </form>
+    {% else %}
+      <a class="btn ghost" href="{{ url_for('auth.login', next=next_url) }}" title="{{ _('Log in to follow') }}">＋ {{ _('Follow') if compact else _('Follow series') }}</a>
+    {% endif %}
+  {% endif %}
+{%- endmacro %}
+
 {% macro card(c, next_url) %}
 {% set p = c.phase() %}
 <article class="card {{ 'dim' if p in ('closed', 'rejected') }} {{ 'urgent' if p in ('due_today', 'closing_soon') }}"
@@ -36,6 +52,7 @@
       {% if not c.verified %}<span class="unver" title="{{ _('Not verified — open manually') }}">?</span>{% endif %}
     </div>
     <h3><a href="{{ url_for('main.detail', call_id=c.id) }}">{{ c.title(lang) }}</a></h3>
+    {% if c.series %}<div class="series-tag"><a href="{{ url_for('main.series_page', series_id=c.series.id) }}">↻ {{ c.series.name(lang) }}</a></div>{% endif %}
     <div class="org">{{ c.country_code|flag }} {{ c.org_name(lang) }}{% if c.city(lang) %} · {{ c.city(lang) }}{% endif %}{% if c.country(lang) %}, {{ c.country(lang) }}{% endif %}</div>
     {% if c.desc(lang) %}<p class="desc">{{ c.desc(lang) }}</p>{% endif %}
     <div class="topics">
@@ -49,8 +66,12 @@
     </div>
     {{ phase_badge(c) }}
     <div class="acts">
-      {% if c.deadline or c.event_start %}<a class="btn ghost" href="{{ url_for('main.call_ics', call_id=c.id) }}" title="{{ _('Add to calendar') }}">📅 .ics</a>{% endif %}
-      {{ subscribe_button(c, next_url) }}
+      {% if c.is_placeholder %}
+        {{ follow_button(c.series, next_url) }}
+      {% else %}
+        {% if c.deadline or c.event_start %}<a class="btn ghost" href="{{ url_for('main.call_ics', call_id=c.id) }}" title="{{ _('Add to calendar') }}">📅 .ics</a>{% endif %}
+        {{ subscribe_button(c, next_url) }}
+      {% endif %}
     </div>
   </aside>
 </article>

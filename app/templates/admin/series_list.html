@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Series") }}{% endblock %}
+{% set REC = {'yearly': 'Yearly', 'twice_yearly': 'Twice a year', 'rolling': 'Rolling', 'irregular': 'Irregular'} %}
+{% block content %}
+<h1>{{ _("Series") }}</h1>
+<p class="hint">{{ _("A series is a recurring source of calls — a journal, conference, festival or programme. Its page is checked weekly for new calls; each edition or theme is its own entry.") }}</p>
+<div class="acts" style="margin:12px 0 4px">
+  <a class="btn primary" href="{{ url_for('admin.series_edit') }}">＋ {{ _("New series") }}</a>
+  <a class="btn" href="{{ url_for('admin.series_suggestions') }}">{{ _("Suggested series") }} ({{ suggestions }})</a>
+  <a class="btn ghost" href="{{ url_for('admin.dashboard') }}">← {{ _("Admin") }}</a>
+</div>
+<section class="panel">
+<table class="adm">
+  {% for s in rows %}
+  {% set live = s.calls|selectattr('is_active')|rejectattr('is_placeholder')|list %}
+  {% set nxt = expected(s) %}
+  <tr>
+    <td><a href="{{ url_for('admin.series_edit', series_id=s.id) }}"><b>{{ s.name(lang) }}</b></a> {% if not s.active %}<small class="hint">({{ _("paused") }})</small>{% endif %}<br>
+      <small>{{ _(REC.get(s.recurrence, 'Irregular')) }} · {{ s.calls|rejectattr('is_placeholder')|list|length }} {{ _("calls") }} · {{ _("Followers") }}: {{ s.followers|length }}
+      · {% if live %}{{ _("current call:") }} {{ live[0].deadline or live[0].deadline_word(lang) }}{% elif nxt %}{{ _("next expected:") }} {{ nxt.strftime('%Y-%m') }}{% else %}—{% endif %}
+      · {{ _("checked") }} {{ s.last_checked_at.strftime('%Y-%m-%d') if s.last_checked_at else '—' }}</small></td>
+    <td class="acts"><a class="btn ghost" href="{{ url_for('main.series_page', series_id=s.id) }}">{{ _("View") }}</a></td>
+  </tr>
+  {% else %}<tr><td>{{ _("No series yet — start with the suggested series.") }}</td></tr>{% endfor %}
+</table>
+</section>
+{% endblock %}

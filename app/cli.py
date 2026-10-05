@@ -77,35 +77,34 @@ def register(app):
         n = translate_missing(limit, progress=lambda done, tot, n: click.echo(f"  {done}/{tot} entries, {n} fields"))
         click.echo(f"Translated {n} fields.")
 
-    @app.cli.command("send-reminders")
+    @app.cli.command("send-notifications")
     @click.option("--dry-run", is_flag=True, help="Show what would be sent without sending")
-    def send_reminders_cmd(dry_run):
-        """Email users about subscribed calls whose deadline is REMINDER_DAYS_BEFORE days away (run daily)."""
-        from .reminders import send_reminders
-        sent, failed = send_reminders(dry_run=dry_run)
-        click.echo(f"{'would send' if dry_run else 'sent'}: {sent} users, failed: {failed}")
+    def send_notifications_cmd(dry_run):
+        """Daily e-mails: deadline reminders, new calls in followed series, changes, admin digest."""
+        from .notify import send_notifications
+        users, admins, failed = send_notifications(dry_run=dry_run)
+        click.echo(f"{'would e-mail' if dry_run else 'e-mailed'}: {users} users, {admins} admins, failed: {failed}")
         if failed:
             raise SystemExit(1)
 
-    @app.cli.command("mailerlite-setup")
-    @click.option("--group-name", default="MISC open calls — deadline reminders")
-    def mailerlite_setup(group_name):
-        """Create the MailerLite custom fields (and the reminder group if MAILERLITE_REMINDER_GROUP_ID is empty)."""
+    @app.cli.command("send-reminders", hidden=True)
+    @click.option("--dry-run", is_flag=True)
+    @click.pass_context
+    def send_reminders_cmd(ctx, dry_run):
+        """Old name of send-notifications."""
+        ctx.invoke(send_notifications_cmd, dry_run=dry_run)
+
+    @app.cli.command("mail-test")
+    @click.argument("to")
+    def mail_test(to):
+        """Send a test e-mail (checks the SMTP settings)."""
         from flask import current_app
 
-        from .mailer import MailerLite, create_group
-        key = current_app.config["MAILERLITE_API_KEY"]
-        if not key:
-            raise click.ClickException("Set MAILERLITE_API_KEY in .env first.")
-        gid = current_app.config["MAILERLITE_REMINDER_GROUP_ID"]
-        if not gid:
-            gid = create_group(key, group_name)
-            click.echo(f"Created group '{group_name}'. Put this in .env:  MAILERLITE_REMINDER_GROUP_ID={gid}")
-        created = MailerLite(key, gid).ensure_fields()
-        click.echo(f"Custom fields created: {', '.join(created) or 'none (already present)'}")
-        click.echo("Next: in MailerLite create an automation with trigger 'Joins a group' → this group, "
-                   "tick 'Allow subscribers to re-enter automation', and design the email with "
-                   "{$misc_reminder_subject}, {$misc_reminder_list} and {$misc_reminder_url}.")
+        from .notify import send_test
+        if current_app.config["MAIL_BACKEND"] != "smtp":
+            click.echo("SMTP_HOST is not set — the test e-mail is only written to the log.")
+        send_test(to)
+        click.echo(f"sent to {to}")
 
     @app.cli.command("make-admin")
     @click.argument("email")

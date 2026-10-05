@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ _("E-mail settings") }}{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  {% if done %}
+    <h1>{{ _("E-mails stopped") }}</h1>
+    <p>{{ _("You will no longer receive e-mails from MISC open calls. You can switch them back on under My subscriptions.") }}</p>
+  {% else %}
+    <h1>{{ _("Stop all e-mails?") }}</h1>
+    <p>{{ _("Deadline reminders, news from series you follow and other e-mails to {0} will stop.").format(email) }}</p>
+    <form method="post" class="acts"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn primary">{{ _("Stop e-mails") }}</button>
+      <a class="btn ghost" href="{{ url_for('main.index') }}">{{ _("Cancel") }}</a></form>
+  {% endif %}
+</section>
+{% endblock %}

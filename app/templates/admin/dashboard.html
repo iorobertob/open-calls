@@ -23,6 +23,7 @@
   {% for s, n in stats.items() %}<a class="stat" href="{{ url_for('main.index', show={'open':'open','watch':'upcoming','reject':'rejected','archived':'closed'}.get(s, 'all')) }}"><b>{{ n }}</b>{{ _(STATUS_LABELS[s]) }}</a>{% endfor %}
   <span class="stat"><b>{{ _("on") if llm else _("off") }}</b>Claude API</span>
   <span class="stat"><b>{{ untranslated }}</b>{{ _("Untranslated entries") }}</span>
+  <span class="stat"><b>{{ 'SMTP' if mail_backend == 'smtp' else _('log only') }}</b>{{ _("E-mail") }}</span>
 </div>
 
 <div class="admin-grid">
@@ -36,7 +37,8 @@
       </details>
       <button class="btn primary">{{ _("Extract & review") }}</button>
     </form>
-    <p><a href="{{ url_for('admin.new') }}">+ {{ _("Add manually") }}</a> · <a href="{{ url_for('admin.users') }}">{{ _("Users") }}</a></p>
+    <p><a href="{{ url_for('admin.new') }}">+ {{ _("Add manually") }}</a> · <a href="{{ url_for('admin.users') }}">{{ _("Users") }}</a>
+      · <a href="{{ url_for('admin.series_list') }}">↻ {{ _("Series") }} ({{ series_count }})</a>{% if suggestions %} · <a href="{{ url_for('admin.series_suggestions') }}">{{ _("Suggested series") }} ({{ suggestions }})</a>{% endif %}</p>
   </section>
   <section class="panel">
     <h2>{{ _("Import weekly list") }}</h2>
@@ -48,7 +50,7 @@
   </section>
   <section class="panel">
     <h2>{{ _("Refresh now") }}</h2>
-    <p class="hint">{{ _("Archives expired entries, fills missing translations and re-checks the least recently checked pages. Runs daily automatically.") }}</p>
+    <p class="hint">{{ _("Archives expired entries, fills missing translations, re-checks the pages of current calls and scans series pages for new calls. Runs automatically every Monday night.") }}</p>
     <form method="post" action="{{ url_for('admin.refresh') }}" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>{{ _("Pages to check") }} <input type="number" name="limit" value="10" min="1" max="200"></label><button class="btn">{{ _("Run") }}</button>

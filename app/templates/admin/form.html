@@ -35,6 +35,10 @@
     <label class="inline"><input type="checkbox" name="verified" {{ 'checked' if c.verified }}> {{ _("Verified on the organiser's page") }}</label>
     {{ field('url', 'Official page', 'url', True) }}
     {{ field('title_lt', 'Title (LT)', wide=True) }} {{ field('title_en', 'Title (EN)', wide=True) }}
+    <label class="wide">{{ _("Series") }}
+      <select name="series_id"><option value="">— {{ _("none (a one-off call)") }} —</option>
+        {% for s in SERIES_ALL() %}<option value="{{ s.id }}" {{ 'selected' if c.series_id == s.id }}>{{ s.name(lang) }}</option>{% endfor %}
+      </select></label>
     {{ field('org', 'Organiser (LT)', wide=True) }} {{ field('org_en', 'Organiser (EN)', wide=True) }}
   </fieldset>
   <fieldset><legend>{{ _("Dates") }}</legend>
@@ -73,6 +77,14 @@
   </div>
 </form>
 
+{% if c.id and not c.series_id and not c.is_placeholder %}
+<section class="panel">
+  <h2>{{ _("Recurring call?") }}</h2>
+  <p class="hint">{{ _("If this journal, conference or festival publishes calls regularly, make it a series: its page is then checked weekly for new calls, and users can follow it.") }}</p>
+  <form method="post" action="{{ url_for('admin.make_series', call_id=c.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn">↻ {{ _("Create a series from this entry") }}</button></form>
+</section>
+{% endif %}
 {% if c.id %}
 <section class="panel danger" id="remove">
   <h2>{{ _("Remove this entry") }}</h2>

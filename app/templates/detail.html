@@ -23,7 +23,7 @@
       <div class="acts col">
         {% if c.url %}<a class="btn primary" href="{{ c.url }}" target="_blank" rel="noopener">{{ _("Official page") }} ↗</a>{% endif %}
         {% if c.deadline or c.event_start %}<a class="btn" href="{{ url_for('main.call_ics', call_id=c.id) }}">📅 {{ _("Add to calendar") }}</a>{% endif %}
-        {{ m.subscribe_button(c, request.path) }}
+        {% if not c.is_placeholder %}{{ m.subscribe_button(c, request.path) }}{% endif %}
         {% if user.is_authenticated and user.is_admin %}<a class="btn ghost" href="{{ url_for('admin.edit', call_id=c.id) }}">✎ {{ _("Edit") }}</a>
         <a class="btn ghost" href="{{ url_for('admin.edit', call_id=c.id) }}#remove">🗑 {{ _("Archive or delete") }}</a>{% endif %}
       </div>
@@ -31,6 +31,13 @@
   </div>
 
   {% if c.desc(lang) %}<p class="lead">{{ c.desc(lang) }}</p>{% endif %}
+  {% if c.series %}
+  <div class="seriesbox">
+    <div>↻ {{ _("Part of the series") }} <a href="{{ url_for('main.series_page', series_id=c.series.id) }}"><b>{{ c.series.name(lang) }}</b></a>
+      <small>{{ _("Follow it to get an e-mail when a new call is published.") }}</small></div>
+    {{ m.follow_button(c.series, request.path) }}
+  </div>
+  {% endif %}
   <div class="topics">{% for t in c.topic_list %}<a class="topic fam-{{ TOPICS.get(t, ('ctx',))[0] }}" href="{{ url_for('main.index', topic=t) }}">{{ topic_label(t, lang) }}</a>{% endfor %}</div>
 
   <dl class="facts">

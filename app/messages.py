@@ -28,6 +28,13 @@ MESSAGES = {
     "page_unreachable": ("Could not open the page: {error}", "Nepavyko atidaryti puslapio: {error}"),
     "possible_duplicate_link": ("Possible duplicate of #{id} (same link)", "Galimas dublikatas: #{id} (ta pati nuoroda)"),
     "possible_duplicate_title": ("Possible duplicate of #{id} (similar title)", "Galimas dublikatas: #{id} (panašus pavadinimas)"),
+    "expected_next": ("Expected next call of the series (created automatically)",
+                      "Laukiamas kitas serijos kvietimas (sukurta automatiškai)"),
+    "found_in_series": ("New call found on the series page: {name}", "Serijos puslapyje rastas naujas kvietimas: {name}"),
+    "new_edition": ("The page now shows a different call (new edition or theme) — a new entry #{id} was created for review instead of changing this one",
+                    "Puslapyje dabar kitas kvietimas (nauja laida ar tema) — vietoj šio įrašo keitimo sukurtas naujas įrašas #{id} peržiūrai"),
+    "expected_missing": ("The expected call of this series was not found by {date} — check the series page",
+                         "Laukiamas šios serijos kvietimas iki {date} nerastas — patikrinkite serijos puslapį"),
     "auto_translated": ("Missing translations filled in automatically", "Trūkstami vertimai užpildyti automatiškai"),
 }
 

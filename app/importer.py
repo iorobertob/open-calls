@@ -118,6 +118,7 @@ def apply_record(call, rec, origin="import", overwrite=True):
 def import_payload(payload, drop_expired=False):
     """Upsert every record; returns (created, updated, skipped)."""
     created = updated = skipped = 0
+    new = []
     today = date.today()
     for rec in payload.get("calls", []):
         key = parse_date(rec.get("expires")) or parse_date(rec.get("deadline"))
@@ -132,6 +133,13 @@ def import_payload(payload, drop_expired=False):
             c = Call()
             apply_record(c, rec)
             db.session.add(c)
+            new.append(c)
             created += 1
+    db.session.flush()
+    if new:
+        from .series import link_series, on_publish
+        for c in new:
+            if link_series(c):          # same website as a known series → attach, tell its followers
+                on_publish(c)
     db.session.commit()
     return created, updated, skipped

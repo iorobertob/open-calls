@@ -1,6 +1,7 @@
-# Archive expired entries, fill missing translations, re-check organiser pages
+# Weekly: archive expired entries, fill missing translations, re-check the pages of current calls,
+# scan series pages for new calls, keep "expected next call" placeholders
 [Unit]
-Description=MISC open calls: daily refresh
+Description=MISC open calls: weekly refresh
 
 [Service]
 Type=oneshot

@@ -41,19 +41,26 @@ class Config:
     CLAUDE_EFFORT = os.environ.get("CLAUDE_EFFORT", "medium")
 
     # Periodic refresh
-    REFRESH_BATCH = int(os.environ.get("REFRESH_BATCH", 40))            # pages re-checked per run
-    REFRESH_MIN_AGE_DAYS = int(os.environ.get("REFRESH_MIN_AGE_DAYS", 7))  # don't re-check more often than this
+    # Weekly check (Monday night). 0 = check every page that is due in one run.
+    REFRESH_BATCH = int(os.environ.get("REFRESH_BATCH", 0))
+    REFRESH_MIN_AGE_DAYS = int(os.environ.get("REFRESH_MIN_AGE_DAYS", 6))  # a page is "due" after 6 days
     ARCHIVE_AFTER_DAYS = int(os.environ.get("ARCHIVE_AFTER_DAYS", 14))  # move expired entries to archive
     TRANSLATE_BATCH = int(os.environ.get("TRANSLATE_BATCH", 40))       # entries translated per refresh run
     ENABLE_SCHEDULER = os.environ.get("ENABLE_SCHEDULER", "0") == "1"   # in-process scheduler (single worker only)
 
-    # Email reminders (MailerLite)
-    MAILERLITE_API_KEY = os.environ.get("MAILERLITE_API_KEY", "")
-    MAILERLITE_REMINDER_GROUP_ID = os.environ.get("MAILERLITE_REMINDER_GROUP_ID", "")
-    # mailerlite once the key and group are set, otherwise console (reminders only written to the log)
-    MAIL_BACKEND = os.environ.get("MAIL_BACKEND") or (
-        "mailerlite" if MAILERLITE_API_KEY and MAILERLITE_REMINDER_GROUP_ID else "console")
-    REMINDER_DAYS_BEFORE = int(os.environ.get("REMINDER_DAYS_BEFORE", 7))
+    # E-mail over SMTP — MailerSend (MailerLite's sending service): smtp.mailersend.net:587,
+    # or LMTA Microsoft 365: smtp.office365.com:587. Without SMTP_HOST e-mails only go to the log.
+    SMTP_HOST = os.environ.get("SMTP_HOST", "")
+    SMTP_PORT = int(os.environ.get("SMTP_PORT", 587))
+    SMTP_USERNAME = os.environ.get("SMTP_USERNAME", "")
+    SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+    SMTP_STARTTLS = os.environ.get("SMTP_STARTTLS", "1") == "1"
+    MAIL_FROM = os.environ.get("MAIL_FROM", "MISC Open Calls <noreply@misc.lmta.lt>")
+    MAIL_REPLY_TO = os.environ.get("MAIL_REPLY_TO", "")
+    MAIL_BACKEND = os.environ.get("MAIL_BACKEND") or ("smtp" if SMTP_HOST else "console")
+    # Deadline reminders: first this many days before the deadline, then every N days until it
+    REMINDER_FIRST_DAYS = int(os.environ.get("REMINDER_FIRST_DAYS", 30))
+    REMINDER_EVERY_DAYS = int(os.environ.get("REMINDER_EVERY_DAYS", 7))
     # Public address of the app, used for links in emails sent from cron jobs (no request context)
     PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://127.0.0.1:5055")
 

@@ -115,7 +115,15 @@ def test_english_mode_has_no_lithuanian_ui(app):
     call.kam_tinka, call.kam_tinka_en = "Studentams", ""
     db.session.commit()
     lt_chars = re.compile(r"[ąčęėįšųūž]")
-    for url in ["/", "/call/1", "/map", "/about", "/my", "/suggest", "/admin/", "/admin/call/1/edit", "/admin/users", "/nope"]:
+    from app.models import Series
+    s = Series(name_en="Soundworks Journal", name_lt="Soundworks Journal", recurrence="yearly", url="https://sw.example")
+    db.session.add(s)
+    db.session.flush()
+    call.series_id = s.id
+    db.session.add(Call(title_en="Other", url="https://a.example/2", status="open"))   # → a suggested series group
+    db.session.commit()
+    for url in ["/", "/call/1", "/map", "/about", "/my", "/suggest", "/admin/", "/admin/call/1/edit", "/admin/users", "/nope",
+                f"/series/{s.id}", "/admin/series", f"/admin/series/{s.id}", "/admin/series/suggestions", "/admin/series/new"]:
         html = c.get(url).get_data(as_text=True)
         html = re.sub(r"<(script|textarea|input|option)[^>]*>.*?</\1>|<input[^>]*>", "", html, flags=re.S)
         text = re.sub(r"<[^>]+>", " ", html)
@@ -124,22 +132,175 @@ def test_english_mode_has_no_lithuanian_ui(app):
         assert found in ([], ["Studentams"]), (url, found[:10])
 
 
-def test_reminders(app):
+def _capture(monkeypatch):
+    """Collect e-mails instead of sending them."""
+    from app import notify
+    sent = []
+    monkeypatch.setattr(notify.Mailer, "send", lambda self, to, subject, text, html, unsubscribe_url=None:
+                        sent.append({"to": to, "subject": subject, "text": text, "html": html}))
+    return sent
+
+
+def test_deadline_reminders_monthly_then_weekly(app, monkeypatch):
     from app.models import ReminderSent, Subscription
-    from app.reminders import send_reminders
-    student = User(email="s@lmta.lt", name="S", lang="en")
+    from app.notify import send_notifications
+    sent = _capture(monkeypatch)
+    student = User(email="s@lmta.lt", name="Sam S", lang="en")
     db.session.add(student)
     db.session.flush()
-    db.session.add(Subscription(user_id=student.id, call_id=1))   # deadline in 3 days → due
-    db.session.add(Subscription(user_id=student.id, call_id=2))   # deadline in 60 days → not yet
+    later = db.session.get(Call, 2)               # deadline in 60 days
+    db.session.add(Subscription(user_id=student.id, call_id=2))
     db.session.commit()
-    assert send_reminders() == (1, 0)          # console backend
-    assert ReminderSent.query.count() == 1
-    assert send_reminders() == (0, 0)          # never twice
-    db.session.get(Call, 1).deadline += timedelta(days=1)  # deadline moved → new reminder
+    t0 = later.deadline - timedelta(days=31)
+    assert send_notifications(ref=t0) == (0, 0, 0)                        # 31 days before: nothing yet
+    assert send_notifications(ref=t0 + timedelta(days=1))[0] == 1          # 30 days before: first reminder
+    assert "Deadline reminder: Later residency" in sent[-1]["subject"] and "30 days left" in sent[-1]["text"]
+    for d in range(2, 8):
+        assert send_notifications(ref=t0 + timedelta(days=d))[0] == 0      # not again within the week
+    assert send_notifications(ref=t0 + timedelta(days=8))[0] == 1          # a week later: 23 days left
+    assert "23 days left" in sent[-1]["text"]
+    assert ReminderSent.query.count() == 2
+    student.email_reminders = False
     db.session.commit()
-    assert send_reminders() == (1, 0)
+    assert send_notifications(ref=t0 + timedelta(days=15))[0] == 0         # switched off
 
+
+def test_one_bundled_email_and_admin_digest(app, monkeypatch):
+    from app.models import Notification, Series, SeriesFollow, Subscription
+    from app.notify import send_notifications
+    from app.series import notify_change, on_publish
+    sent = _capture(monkeypatch)
+    s = Series(name_en="Soundworks Journal", name_lt="Soundworks žurnalas", recurrence="yearly")
+    student = User(email="s@lmta.lt", lang="en")
+    db.session.add_all([s, student])
+    db.session.flush()
+    db.session.add_all([SeriesFollow(user_id=student.id, series_id=s.id), Subscription(user_id=student.id, call_id=1)])
+    new_call = db.session.get(Call, 2)
+    new_call.series_id = s.id
+    db.session.flush()
+    assert on_publish(new_call) == 1 and on_publish(new_call) == 0       # followers told once
+    notify_change(db.session.get(Call, 1), "deadline: 2026-12-01")
+    pending = Call(title_en="Suggested thing", status="pending", url="https://p.example")
+    db.session.add(pending)
+    db.session.commit()
+    users, admins, failed = send_notifications()
+    assert (users, failed) == (1, 0) and admins == 1                     # admin@lmta.lt from ADMIN_EMAILS
+    mine = [m for m in sent if m["to"] == "s@lmta.lt"]
+    assert len(mine) == 1                                                # one e-mail, three sections
+    assert "updates for you" in mine[0]["subject"]
+    for part in ("Upcoming deadlines", "New calls in series you follow", "Soundworks Journal", "Changes to calls you follow",
+                 "deadline: 2026-12-01", "/email/stop/"):
+        assert part in mine[0]["text"], part
+    digest = [m for m in sent if m["to"] == "admin@lmta.lt"][0]
+    assert "Suggested thing" in digest["text"] and "/admin/call/" in digest["text"]
+    assert Notification.query.filter(Notification.sent_at.is_(None)).count() == 0
+    sent.clear()
+    assert send_notifications() == (0, 0, 0) and sent == []              # nothing new → no e-mails
+
+
+def test_stop_link_turns_emails_off(app):
+    from app.notify import stop_url
+    student = User(email="s@lmta.lt")
+    db.session.add(student)
+    db.session.commit()
+    path = stop_url(student).split("/email/")[1]
+    c = app.test_client()
+    assert c.get("/email/" + path).status_code == 200
+    c.post("/email/" + path)
+    db.session.refresh(student)
+    assert not (student.email_reminders or student.email_series or student.email_admin)
+    assert c.get("/email/stop/forged-token").status_code == 404
+
+
+def test_series_placeholder_and_publish(app):
+    from app.models import Series
+    from app.series import ensure_placeholder, expected_next, on_publish, placeholder_of
+    s = Series(name_en="Soundworks Journal", name_lt="Soundworks žurnalas", recurrence="yearly", url="https://sw.example/cfp")
+    db.session.add(s)
+    db.session.flush()
+    past = db.session.get(Call, 3)                      # closed call of this series
+    past.series_id, past.first_seen = s.id, "2026-02-10"
+    db.session.commit()
+    assert expected_next(s, ref=date(2026, 10, 1)) == date(2027, 2, 1)
+    ph = ensure_placeholder(s)
+    assert ph and ph.is_placeholder and ph.status == "watch" and ph.phase() == "upcoming"
+    assert "Expected around February 2027" == ph.deadline_word_en and "2027 m. vasarį" in ph.deadline_word_lt
+    assert ensure_placeholder(s) is None                  # only one
+    new = Call(title_en="Soundworks 2027 call", status="open", series_id=s.id, deadline=date.today() + timedelta(days=90))
+    db.session.add(new)
+    db.session.flush()
+    on_publish(new)
+    db.session.commit()
+    assert placeholder_of(s) is None                      # replaced by the real call
+
+
+def test_recheck_never_overwrites_with_a_new_edition(app, monkeypatch):
+    from app import refresh
+    from app.extract import Page
+    call = db.session.get(Call, 2)
+    call.content_hash = "old"
+    old_deadline = call.deadline
+    db.session.commit()
+    page = Page(url=call.url, status=200, text="Call for residencies 2028 — deadline next year")
+    monkeypatch.setattr(refresh, "fetch", lambda url: page)
+    monkeypatch.setattr(refresh, "llm_available", lambda: True)
+    fake = {f: "" for f in __import__("app.extract", fromlist=["Extraction"]).Extraction.model_fields}
+    fake.update(is_call=True, status="open", kind="residency", title_en="Later residency 2028",
+                deadline=(old_deadline + timedelta(days=365)).isoformat(), topics=[], star=False, confidence="high")
+    from app.extract import Extraction
+    monkeypatch.setattr(refresh, "extract_with_claude", lambda p, previous=None: Extraction(**fake))
+    changes = refresh.check_call(call)
+    db.session.commit()
+    assert "new entry" in changes[0]
+    assert db.session.get(Call, 2).deadline == old_deadline          # untouched
+    new = Call.query.filter_by(status="pending").one()
+    assert new.title_en == "Later residency 2028" and db.session.get(Call, 2).needs_review
+
+
+def test_series_scan_creates_pending_entries(app, monkeypatch):
+    from app import series as series_mod
+    from app.extract import Extraction, Page
+    from app.models import Series
+    s = Series(name_en="Soundworks Journal", recurrence="yearly", url="https://sw.example/cfp")
+    db.session.add(s)
+    db.session.commit()
+    base = {f: "" for f in Extraction.model_fields} | {"is_call": True, "status": "open", "kind": "journal",
+                                                        "topics": [], "star": False, "confidence": "high"}
+    found = [Extraction(**base | {"title_en": "Soundworks Vol. 9: Listening", "deadline": "2027-03-01",
+                                   "url": "https://sw.example/cfp/vol9"}),
+             Extraction(**base | {"title_en": "Soon conf", "deadline": "", "url": "https://a.example"})]  # already known
+
+    class Resp:
+        stop_reason = "end_turn"
+        parsed_output = type("Scan", (), {"new_calls": found})()
+    monkeypatch.setattr("app.extract.parse_with_fallback", lambda **kw: Resp())
+    created = series_mod.scan_series(s, Page(url=s.url, status=200, text="..."))
+    db.session.commit()
+    assert [c.title_en for c in created] == ["Soundworks Vol. 9: Listening"]
+    assert created[0].status == "pending" and created[0].series_id == s.id and created[0].needs_review
+
+
+def test_smtp_message_format(app, monkeypatch):
+    import smtplib
+    from app import notify
+    boxes = []
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout=None): boxes.append({"host": host, "port": port})
+        def starttls(self): boxes[-1]["tls"] = True
+        def login(self, u, p): boxes[-1]["login"] = u
+        def send_message(self, m): boxes[-1]["msg"] = m
+        def quit(self): pass
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    app.config.update(MAIL_BACKEND="smtp", SMTP_HOST="smtp.mailersend.net", SMTP_PORT=587,
+                      SMTP_USERNAME="MS_user", SMTP_PASSWORD="x", MAIL_FROM="MISC Open Calls <noreply@misc.lmta.lt>")
+    with notify.Mailer() as m:
+        m.send("s@lmta.lt", "Subject ąčę", "text body", "<p>html body</p>", "https://x/email/stop/t")
+    box = boxes[0]
+    assert box["host"] == "smtp.mailersend.net" and box["tls"] and box["login"] == "MS_user"
+    msg = box["msg"]
+    assert msg["From"] == "MISC Open Calls <noreply@misc.lmta.lt>" and msg["List-Unsubscribe"] == "<https://x/email/stop/t>"
+    assert msg.get_content_type() == "multipart/alternative" and msg["Subject"] == "Subject ąčę"
 
 def test_blocked_page_detection():
     from app.extract import Page

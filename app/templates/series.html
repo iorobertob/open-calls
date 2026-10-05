@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ s.name(lang) }}{% endblock %}
+{% block content %}
+<p class="back"><a href="{{ url_for('main.index') }}">← {{ _("Back to list") }}</a></p>
+<section class="panel serieshead">
+  <div>
+    <span class="kind" style="--kh:{{ KINDS.get(s.kind, KINDS['other']).hue }}">↻ {{ _("Series") }}</span>
+    <h1>{{ s.name(lang) }}</h1>
+    {% set other = s.name_en if lang == 'lt' else s.name_lt %}
+    {% if other and other != s.name(lang) %}<p class="ten">{{ other }}</p>{% endif %}
+    <p class="sub">{{ s.org }}{% if s.url %} · <a href="{{ s.url }}" target="_blank" rel="noopener">{{ _("Official page") }} ↗</a>{% endif %}</p>
+    <p class="hint">{{ _("This page is checked weekly. When a new call is published here, it appears in the list and followers get an e-mail.") }}</p>
+  </div>
+  <div class="acts col">{{ m.follow_button(s, request.path) }}
+    <small class="hint">{{ _("Followers") }}: {{ s.followers|length }}</small></div>
+</section>
+<h2>{{ _("Current and upcoming calls") }}</h2>
+<div class="cards">{% for c in live %}{{ m.card(c, request.path) }}{% else %}<p class="empty">{{ _("No current call. Follow the series to hear about the next one.") }}</p>{% endfor %}</div>
+{% if past %}
+<details class="history"><summary>{{ _("Past calls") }} ({{ past|length }})</summary>
+  <ul class="plain">{% for c in past %}<li><a href="{{ url_for('main.detail', call_id=c.id) }}">{{ c.title(lang) }}</a> <small>{{ c.deadline or c.deadline_word(lang) }}</small></li>{% endfor %}</ul>
+</details>
+{% endif %}
+{% endblock %}

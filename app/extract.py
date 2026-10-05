@@ -21,6 +21,7 @@ from .taxonomy import KINDS, TOPICS
 
 log = logging.getLogger(__name__)
 
+NOISE = re.compile(r"cookie|consent|gdpr|newsletter|banner|popup|modal", re.I)
 UA = "Mozilla/5.0 (compatible; MISC-OpenCalls/1.0; +https://misc.lmta.lt)"
 MAX_TEXT = 60_000
 
@@ -46,7 +47,8 @@ class Page(BaseModel):
 
     @property
     def content_hash(self):
-        # Hash the visible text only, so rotating ads / tokens in markup don't count as changes.
+        # Hash the main visible text only (menus, footers, banners removed in fetch), so rotating
+        # ads, tokens in markup or a changed menu don't count as a change.
         norm = re.sub(r"\s+", " ", self.text).strip()
         return hashlib.sha256(norm.encode("utf-8")).hexdigest() if norm else ""
 
@@ -71,9 +73,14 @@ def fetch(url, timeout=25):
         if md and md.get("content"):
             p.description = md["content"].strip()
         p.jsonld = "\n".join(s.get_text() for s in soup.find_all("script", type="application/ld+json"))[:8000]
-        for tag in soup(["script", "style", "noscript", "svg", "iframe", "form"]):
+        for tag in soup(["script", "style", "noscript", "svg", "iframe", "form", "nav", "header", "footer", "aside"]):
             tag.decompose()
-        text = soup.get_text("\n")
+        # cookie / consent / newsletter banners change often and say nothing about the call
+        for tag in soup.find_all(attrs={"id": NOISE}) + soup.find_all(attrs={"class": NOISE}):
+            if not tag.decomposed:
+                tag.decompose()
+        main = soup.find("main") or soup.find(attrs={"role": "main"}) or soup.find("article")
+        text = (main if main and len(main.get_text(strip=True)) > 200 else soup).get_text("\n")
         text = re.sub(r"\n\s*\n+", "\n\n", text)
         p.text = re.sub(r"[ \t]+", " ", text).strip()[:MAX_TEXT]
     except requests.RequestException as e:
@@ -91,6 +98,7 @@ class Extraction(BaseModel):
         description="open = accepting applications now; watch = announced but not yet open / next edition expected; "
                     "reject = open but does not fit MISC or LT/EU applicants cannot apply; closed = deadline passed")
     kind: KindLit
+    url: str = Field(description="The most specific link to this call shown on the page, or empty")
     title_en: str
     title_lt: str = Field(description="Natural Lithuanian translation of the title")
     org: str = Field(description="Organiser as written in Lithuanian (proper names unchanged; translate generic words, "

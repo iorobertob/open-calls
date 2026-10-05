@@ -13,7 +13,9 @@ The database is seeded with the list the MISC coordinator curated on 2026‑09�
 | **Add by link** | An admin pastes a URL. The app fetches the organiser's page, Claude extracts the fields using the MISC curation criteria (scope, geography rules, eligibility traps), and the admin reviews the pre‑filled form before saving. Without an API key, a basic extractor fills in the title, description and deadline. |
 | **Manual entry / edit** | Full edit form. Every change is logged in the entry's history. |
 | **Suggestions** | Logged‑in users can suggest a link. It is extracted automatically and waits in the admin queue until approved. |
-| **Periodic refresh** | `flask refresh` (daily via a systemd timer) moves entries whose deadline passed more than 14 days ago to the archive. It also re‑fetches organiser pages (oldest first), flags broken links and detects page changes. When a page changes, Claude re‑reads it and updates the deadline, event dates and watch→open status. Every automatic change goes to the admin review queue. |
+| **Weekly refresh** | `flask refresh`, every Monday night via a systemd timer. It archives entries whose deadline passed more than 14 days ago and fills in missing translations. It also re‑reads the pages of current calls: a page counts as changed when its main text (without menus, footers and cookie banners) differs from last week's, and only then is Claude called. If a page now shows a *different* call (a new edition or theme), a new entry is created for review instead of overwriting the existing one. |
+| **Series** | Recurring sources (journals, conferences, festivals, programmes). Their pages are scanned weekly and new calls become pending entries for approval. An "expected next call" placeholder (e.g. *Expected around September 2027*) appears under *Opens soon* and is replaced by the real call once it is approved. Users can **follow** a series. |
+| **E‑mail (SMTP)** | One e‑mail per person per day at most: deadline reminders (from 1 month before, then weekly), new calls in followed series, and changes to subscribed calls. Admins get a daily digest of entries to review. Every e‑mail has a one‑click unsubscribe link. |
 | **Calendar (no account)** | Each entry has an `.ics` download. So does any filtered list. Any filtered list can also be **subscribed** to as a feed (`/feed.ics?...`, webcal) that updates by itself. |
 | **Calendar (LMTA account)** | Microsoft login with the institutional account. Users subscribe to entries (☆) and get a personal feed URL (`/feed/u/<token>.ics`) for Outlook, Google or Apple Calendar, with reminders 7 days and 1 day before each deadline. |
 | **Map** | Leaflet map of entries by country, with urgent ones in red. Online and international entries are listed separately. |
@@ -43,8 +45,8 @@ flask import MISC-sarasas-2026-10-05.html --drop-expired   # merge a weekly list
 flask add-url https://… [--status open]                    # extract one link (pending review by default)
 flask refresh [--limit 40] [--no-llm]                      # archive expired + re-check pages
 flask translate [--dry-run]                                # fill missing LT/EN texts with Claude
-flask send-reminders [--dry-run]                           # deadline reminder emails (daily)
-flask mailerlite-setup                                     # create MailerLite group + fields (once)
+flask send-notifications [--dry-run]                       # daily e-mails (reminders, series news, admin digest)
+flask mail-test you@lmta.lt                                # check the SMTP settings
 flask make-admin someone@lmta.lt
 flask db migrate -m "…" && flask db upgrade                # after model changes
 ```
@@ -73,16 +75,50 @@ flask translate               # translate them with Claude (needs ANTHROPIC_API_
 
 After that, the daily refresh translates new entries automatically (`TRANSLATE_BATCH` per run).
 
-## Email reminders (MailerLite)
+## Series and the life of an entry
 
-Logged‑in users who subscribe to an entry get one email **7 days before its deadline** (`REMINDER_DAYS_BEFORE`). All due entries for a user are bundled into one message, and users can switch reminders off on *My subscriptions*. MailerLite has no one‑to‑one sending API, so the app uses MailerLite's automation pattern:
+Each entry is **one specific call**: one edition or theme, with its own deadline. A **series** groups the calls of a recurring source and keeps watching it between calls:
 
-1. Create an API token in MailerLite (Integrations → API) and put it in `.env` as `MAILERLITE_API_KEY`.
-2. `flask mailerlite-setup` creates the reminder group and the custom fields (`misc_reminder_subject`, `misc_reminder_list`, `misc_reminder_count`, `misc_reminder_url`, `misc_language`). It prints `MAILERLITE_REMINDER_GROUP_ID` to add to `.env`.
-3. In MailerLite, create an **automation**. Trigger: *Joins a group* → that group. Settings: tick **Allow subscribers to re‑enter automation**. Email subject `{$misc_reminder_subject}`, body `{$misc_reminder_list}` plus a button to `{$misc_reminder_url}`. For two languages, use a condition on `misc_language`.
-4. `flask send-reminders` (daily 09:00 via the systemd timer) updates each user's fields, then removes and re‑adds them to the group, which fires the automation. `--dry-run` shows what would be sent. Each reminder is recorded, so it is never sent twice; if a deadline moves, a new reminder follows.
+```
+call 2026 (open) ─deadline─▶ closed ─14 days─▶ archived
+                                │
+                                └─▶ placeholder "next call — expected around Sept 2027" (Opens soon)
+weekly scan of the series page finds the 2027 call ─▶ new pending entry ─approve─▶ open
+                                                       (placeholder removed, followers e-mailed)
+```
 
-Until both `MAILERLITE_API_KEY` and `MAILERLITE_REMINDER_GROUP_ID` are set, reminders are only written to the log. Once they are set, running `flask send-reminders` locally sends real emails to the users in your local database.
+- **Create series:** **Admin → Series → Suggested series** groups the existing entries by website. Untick what doesn't belong, check the name and the page address (where new calls are published), and create. A single entry can also become a series ("Create a series from this entry" on its edit page).
+- **Expected next call:** worked out from when previous calls appeared, plus the rhythm (yearly or twice a year). You can also set a fixed usual month. If the expected call hasn't been found within about 3 months of that date, the placeholder is archived and the admins are told to check.
+- **New entries are never published automatically.** Calls found on series pages, user suggestions and different editions found during re‑checks all wait in **Admin → Waiting for approval**, and the admin digest e‑mail lists them.
+
+## E-mail notifications (SMTP)
+
+The daily job (`flask send-notifications`, 09:00) sends **at most one e‑mail per person per day**, bundling:
+
+| What | When |
+|---|---|
+| Deadline reminders for subscribed calls | first when the deadline is **30 days** away, then **every 7 days** until it (`REMINDER_FIRST_DAYS`, `REMINDER_EVERY_DAYS`) |
+| New calls in followed series | the day after a call of the series is published or approved |
+| Changes to subscribed calls | e.g. a deadline extension found by the weekly check, or changed by an admin |
+| Admin digest (admins only) | entries newly waiting for approval or review |
+
+Users choose what they receive under **My subscriptions → E‑mail notifications**. Each e‑mail has a one‑click "stop all e‑mails" link and a `List-Unsubscribe` header. Language follows the user's LT/EN choice.
+
+**Sending:** MailerLite itself has no SMTP. Its transactional sister product **MailerSend** has it, and you log in with your MailerLite account (single sign‑on). In MailerSend:
+
+1. **Domains → Add domain**, e.g. `misc.lmta.lt`. Add the DNS records it shows (SPF, DKIM, return path) at LMTA's DNS; that needs LMTA IT. Wait until the domain shows as verified.
+2. **Domains → (your domain) → SMTP → Generate new user.** Copy the username and password.
+3. In `/var/www/open-calls/.env`:
+   ```
+   SMTP_HOST=smtp.mailersend.net
+   SMTP_PORT=587
+   SMTP_USERNAME=…
+   SMTP_PASSWORD=…
+   MAIL_FROM=MISC Open Calls <noreply@misc.lmta.lt>
+   ```
+4. Run `sudo systemctl restart opencalls`, then send a test: `sudo -u opencalls env FLASK_APP=wsgi.py .venv/bin/flask mail-test you@lmta.lt`.
+
+Any SMTP server works with the same settings. For example, LMTA's Microsoft 365: `SMTP_HOST=smtp.office365.com`, port 587, a mailbox with SMTP AUTH enabled by IT, and `MAIL_FROM` set to that mailbox. Without `SMTP_HOST`, e‑mails are only written to the log (`journalctl -u opencalls-reminders`).
 
 ## Production deployment — https://misc.lmta.lt/open-calls
 
@@ -125,7 +161,7 @@ Run `deploy.sh` as yourself, not with sudo. It refuses to run as root and asks f
 - applies the production values in `.env`: `DEV_LOGIN=0`, `APP_PREFIX=/open-calls`, `PUBLIC_BASE_URL`, HTTPS cookies, and a strong `SECRET_KEY` if missing; everything else in `.env` is left as you wrote it
 - sets the permissions in the table above
 - creates/updates the virtualenv (as you), runs database migrations (as `opencalls`), and seeds the curated list the first time only
-- installs `opencalls.service` plus the daily **refresh** (04:15) and **reminders** (09:00) timers, then reloads gunicorn gracefully (no downtime)
+- installs `opencalls.service` plus the **weekly refresh** (Monday 03:15) and **daily e‑mail** (09:00) timers, then reloads gunicorn gracefully (no downtime)
 - writes the nginx snippet and, the first time only, adds its `include` to the `listen 443` block for misc.lmta.lt (the port‑80 redirect block is left alone). A backup goes to `/var/backups/opencalls-nginx/`; if `nginx -t` fails, the site file and snippet are restored
 - reloads nginx and checks that `https://misc.lmta.lt/open-calls/` returns 200
 
@@ -155,8 +191,8 @@ Everything runs under systemd. There are no containers.
 | Unit | What it is |
 |---|---|
 | `opencalls.service` | The web app (gunicorn, socket `/run/opencalls/gunicorn.sock`). Restarts automatically if it crashes (`Restart=on-failure`) and starts on boot. |
-| `opencalls-refresh.timer` → `opencalls-refresh.service` | Daily 04:15 (Vilnius): archive expired entries, translate, re‑check organiser pages |
-| `opencalls-reminders.timer` → `opencalls-reminders.service` | Daily 09:00 (Vilnius): MailerLite deadline reminders |
+| `opencalls-refresh.timer` → `opencalls-refresh.service` | **Weekly, Monday 03:15** (Vilnius): archive expired entries, translate, re‑check current calls' pages, scan series pages, keep expected‑next placeholders |
+| `opencalls-reminders.timer` → `opencalls-reminders.service` | Daily 09:00 (Vilnius): e‑mails — deadline reminders, series news, changes, admin digest |
 
 Code: `/var/www/open-calls` · settings: `/var/www/open-calls/.env` · database: `/var/www/open-calls/instance/opencalls.db` · nginx: `/etc/nginx/snippets/misc-open-calls.conf`
 
@@ -186,7 +222,7 @@ If the app answers 200 on the socket but the site still fails, the problem is in
 ```bash
 sudo journalctl -u opencalls -f                  # live app log (requests, login errors)
 sudo journalctl -u opencalls-refresh -n 50       # last refresh run
-sudo journalctl -u opencalls-reminders -n 50     # last reminder run
+sudo journalctl -u opencalls-reminders -n 50     # last e-mail run
 systemctl list-timers 'opencalls-*'              # when the jobs run next / ran last
 ```
 
@@ -194,14 +230,14 @@ systemctl list-timers 'opencalls-*'              # when the jobs run next / ran 
 
 ```bash
 sudo systemctl start opencalls-refresh       # refresh now (output in its journal)
-sudo systemctl start opencalls-reminders     # send due reminders now
+sudo systemctl start opencalls-reminders     # send today's e-mails now
 ```
 
 **Run any `flask` command on the server** (as the app user, so file permissions stay correct):
 
 ```bash
 cd /var/www/open-calls
-sudo -u opencalls env FLASK_APP=wsgi.py .venv/bin/flask send-reminders --dry-run
+sudo -u opencalls env FLASK_APP=wsgi.py .venv/bin/flask send-notifications --dry-run
 sudo -u opencalls env FLASK_APP=wsgi.py .venv/bin/flask translate --dry-run
 sudo -u opencalls env FLASK_APP=wsgi.py .venv/bin/flask make-admin someone@lmta.lt
 ```
@@ -225,11 +261,15 @@ The coordinator's weekly Claude routine produces `MISC-sarasas-<date>.html` with
 
 ```
 app/
-  models.py      Call, CallChange (audit), User, Subscription, RefreshRun
+  models.py      Call, Series, CallChange (audit), User, Subscription, SeriesFollow, Notification, RefreshRun
   taxonomy.py    types, topics/families, countries → regions + coordinates
   search.py      filters shared by the list, API, calendar exports and map
   extract.py     page fetch + Claude structured extraction + heuristic fallback
-  refresh.py     archive + re-check job
+  refresh.py     weekly job: archive, translate, re-check calls (overwrite guard), scan series
+  series.py      series, expected-next placeholders, series page scan, follower notifications
+  notify.py      daily e-mails over SMTP (reminders, series news, changes, admin digest)
+  duplicates.py  duplicate detection (same link / similar title)
+  translate.py   fills missing LT/EN texts with Claude
   importer.py    weekly JSON/HTML import (upsert)
   ics.py         iCalendar generation
   auth.py        Microsoft Entra ID login (MSAL)

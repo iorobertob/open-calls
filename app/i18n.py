@@ -350,6 +350,14 @@ LT = {
     'Removed from the series.': 'Pašalinta iš serijos.',
     '{0} entries moved to their own series, {1} left without a series.': '{0} įrašai perkelti į jų serijas, {1} liko be serijos.',
     '{0} entries added to the series.': 'Prie serijos pridėta įrašų: {0}.',
+    'Show': 'Rodyti',
+    'All: series and calls': 'Visi: serijos ir kvietimai',
+    'series': 'serijos',
+    'call': 'kvietimas',
+    'Next deadline': 'Artimiausias terminas',
+    'next': 'kitas',
+    'Show the calls in this series': 'Rodyti šios serijos kvietimus',
+    'Calls not in a series': 'Kvietimai, nepriklausantys serijai',
 }
 
 

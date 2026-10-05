@@ -130,3 +130,48 @@ def run_search(f: Filters, lang="lt", facets=False):
               "cat": cat_counts,
               "topic": Counter(x for c in in_cat for x in set(c.topic_list))}
     return sort_calls(result, f.sort, lang, ref), counts
+
+
+class SeriesGroup:
+    """A series with the (filtered, sorted) calls it contains — one card on the home page."""
+    kind = "series"
+
+    def __init__(self, series):
+        self.series = series
+        self.calls = []
+
+    @property
+    def lead(self):
+        """The call that decides the card's deadline and badge: the first live one, else the first."""
+        return next((c for c in self.calls if c.phase() not in ("closed", "rejected")), self.calls[0])
+
+    @property
+    def fields(self):
+        out = []
+        for c in self.calls:
+            out += [f for f in c.field_list if f not in out]
+        return out
+
+
+def group_by_series(calls, view="series"):
+    """Turn the sorted list of calls into home-page items, keeping the sort order:
+    - a series card where its first matching call would be (listing pages don't count as series);
+    - view "series": calls without a series go into one last group ("other");
+    - view "all": calls without a series stay as normal cards in their place.
+    Returns (items, n_series) where items are SeriesGroup, ("call", call) or ("other", [calls])."""
+    items, groups, loose = [], {}, []
+    for c in calls:
+        s = c.series if c.series_id else None
+        if s is not None and not s.is_aggregator:
+            g = groups.get(s.id)
+            if g is None:
+                g = groups[s.id] = SeriesGroup(s)
+                items.append(g)
+            g.calls.append(c)
+        elif view == "all":
+            items.append(("call", c))
+        else:
+            loose.append(c)
+    if loose:
+        items.append(("other", loose))
+    return items, len(groups)

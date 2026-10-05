@@ -77,3 +77,41 @@
   </aside>
 </article>
 {% endmacro %}
+
+{% macro series_card(g, open_, next_url) %}
+{% set s = g.series %}{% set lead = g.lead %}
+<article class="scard" style="--kh:{{ KINDS.get(s.kind or lead.kind, KINDS['other']).hue }}">
+  <div class="shead">
+    <div class="cmain">
+      <div class="meta-top">
+        <span class="kind">↻ {{ _("Series") }} · {{ KINDS.get(s.kind or lead.kind, KINDS['other'])['short_' ~ lang] }}</span>
+        {% for fk in g.fields %}{% set fl = TAX.field_by_key.get(fk) %}{% if fl %}<span class="ftag" style="--fh:{{ fl.hue }}">{{ fl.name(lang) }}</span>{% endif %}{% endfor %}
+      </div>
+      <h3><a href="{{ url_for('main.series_page', series_id=s.id) }}">{{ s.name(lang) }}</a></h3>
+      <div class="org">{{ lead.country_code|flag }} {{ s.org or lead.org_name(lang) }}</div>
+      <p class="desc scount">{{ g.calls|length }} {{ _("call") if g.calls|length == 1 else _("calls") }}{% if lead.phase() not in ('closed', 'rejected') %} · {{ _("next") }}: <a href="{{ url_for('main.detail', call_id=lead.id) }}">{{ lead.title(lang)|truncate(90) }}</a>{% endif %}</p>
+    </div>
+    <aside class="cside">
+      <div class="dl">
+        {% if lead.deadline %}<small>{{ _("Next deadline") }}</small><b>{{ lead.deadline|fmtdate(lang) }}</b>
+        {% elif lead.deadline_word(lang) %}<b class="word">{{ lead.deadline_word(lang) }}</b>{% endif %}
+      </div>
+      {{ phase_badge(lead) }}
+      <div class="acts">{{ follow_button(s, next_url, compact=True) }}</div>
+    </aside>
+  </div>
+  <details class="snest" {{ 'open' if open_ }}>
+    <summary>{{ _("Show the calls in this series") }} ({{ g.calls|length }})</summary>
+    <div class="nested">{% for c in g.calls %}{{ card(c, next_url) }}{% endfor %}</div>
+  </details>
+</article>
+{% endmacro %}
+
+{% macro other_group(calls, next_url) %}
+<article class="scard other">
+  <details class="snest">
+    <summary><b>{{ _("Calls not in a series") }}</b> ({{ calls|length }})</summary>
+    <div class="nested">{% for c in calls %}{{ card(c, next_url) }}{% endfor %}</div>
+  </details>
+</article>
+{% endmacro %}

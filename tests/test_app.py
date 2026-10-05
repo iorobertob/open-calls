@@ -625,3 +625,26 @@ def test_redistribute_and_listing_hidden_from_visitors(app):
     db.session.commit()
     assert (moved, loose) == (1, 1)                                        # "Soon conf" matched by name, the other none
     assert db.session.get(Call, 1).series_id == other.id and db.session.get(Call, 2).series_id is None
+
+
+# ---------------------------------------------------------------- home page: series view / all view
+
+def test_home_series_view_and_all_view(app):
+    sw = _series(name_en="Soundworks", name_lt="Soundworks", url="https://sw.example")
+    listing = _series(name_en="SMT events", url="https://smt.example", is_aggregator=True)
+    db.session.get(Call, 1).series_id = sw.id             # Soon conf → a real series
+    db.session.get(Call, 4).series_id = listing.id        # Watch me → a listing page = no series for visitors
+    db.session.commit()
+    c = app.test_client()
+    c.get("/lang/en")
+    html = c.get("/").get_data(as_text=True)              # default = Series view
+    assert html.index('class="searchrow"') < html.index('class="explore"')        # search box comes first
+    assert 'class="on" aria-current="true">↻ Series' in html
+    assert html.count('<article class="scard"') == 1 and "Soundworks" in html
+    assert '<details class="snest" >' in html or '<details class="snest">' in html  # collapsed
+    assert "Calls not in a series" in html and "SMT events" not in html
+    allv = c.get("/?view=all").get_data(as_text=True)
+    assert '<details class="snest" open>' in allv                                   # series expanded
+    assert "Calls not in a series" not in allv and "Later residency" in allv        # other calls as normal cards
+    assert 'name="view" value="all"' in allv                                        # kept when searching
+    assert "view=all" in c.get("/?view=all&field=music").get_data(as_text=True)   # kept by the explorer links

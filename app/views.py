@@ -17,7 +17,7 @@ from .ics import ics_response
 from .importer import apply_record
 from .messages import msg
 from .models import Call, CallChange, Series, SeriesFollow, Subscription, User, db, today
-from .search import Filters, run_search, sort_calls
+from .search import Filters, group_by_series, run_search, sort_calls
 from .taxonomy import COUNTRIES, KINDS, TOPICS as SCREEN_TEMPLATE_TOPICS
 
 bp = Blueprint("main", __name__)
@@ -58,9 +58,11 @@ def index():
         q = urlencode(list(m.items(multi=True)))
         return url_for(".index") + ("?" + q if q else "")
 
+    view = request.args.get("view") if request.args.get("view") in ("series", "all") else "series"
+    items, n_series = group_by_series(calls, view)
     return render_template("index.html", calls=calls, f=f, kind_counts=counts["kind"], counts=counts,
                            countries=countries, urgent=urgent, query_string=request.query_string.decode(),
-                           qs=qs, qs_toggle=qs_toggle)
+                           qs=qs, qs_toggle=qs_toggle, view=view, items=items, n_series=n_series)
 
 
 @bp.route("/call/<int:call_id>")

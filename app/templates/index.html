@@ -6,6 +6,27 @@
   <p class="sub">{{ _("Calls, conferences, journals, residencies and competitions for LMTA students, teachers, artists and researchers.") }}</p>
 </section>
 
+<form class="filters" method="get" id="filters">
+  <div class="searchrow">
+    <input type="search" name="q" value="{{ f.q }}" placeholder="{{ _('Search titles, organisers, descriptions…') }}" aria-label="{{ _('Search') }}">
+    <select name="show" aria-label="{{ _('Status') }}">
+      {% for k, label in [('active', 'Active (open + upcoming)'), ('urgent', 'Closing within 14 days'), ('open', 'Open now'),
+                          ('upcoming', 'Opens soon'), ('closed', 'Closed'), ('rejected', 'Checked — not eligible'), ('all', 'Everything')] %}
+        <option value="{{ k }}" {{ 'selected' if f.show == k }}>{{ _(label) }}</option>
+      {% endfor %}
+    </select>
+    <select name="sort" aria-label="{{ _('Sort') }}">
+      {% for k, label in [('deadline', 'Soonest deadline'), ('new', 'Recently added'), ('title', 'Title')] %}
+        <option value="{{ k }}" {{ 'selected' if f.sort == k }}>{{ _(label) }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn primary">{{ _("Filter") }}</button>
+  </div>
+  {% if f.field %}<input type="hidden" name="field" value="{{ f.field }}">{% endif %}
+  {% if f.cat %}<input type="hidden" name="cat" value="{{ f.cat }}">{% endif %}
+  {% for t in f.topics %}<input type="hidden" name="topic" value="{{ t }}">{% endfor %}
+  {% if view != 'series' %}<input type="hidden" name="view" value="{{ view }}">{% endif %}
+
 {# ---- Explorer: field → category → sub-disciplines (plain links: shareable, back button works) #}
 {% set fsel = TAX.field_by_key.get(f.field) %}
 {% set csel = TAX.cat_by_key.get(f.cat) %}
@@ -57,25 +78,6 @@
   {% endif %}
 </nav>
 
-<form class="filters" method="get" id="filters">
-  <div class="searchrow">
-    <input type="search" name="q" value="{{ f.q }}" placeholder="{{ _('Search titles, organisers, descriptions…') }}" aria-label="{{ _('Search') }}">
-    <select name="show" aria-label="{{ _('Status') }}">
-      {% for k, label in [('active', 'Active (open + upcoming)'), ('urgent', 'Closing within 14 days'), ('open', 'Open now'),
-                          ('upcoming', 'Opens soon'), ('closed', 'Closed'), ('rejected', 'Checked — not eligible'), ('all', 'Everything')] %}
-        <option value="{{ k }}" {{ 'selected' if f.show == k }}>{{ _(label) }}</option>
-      {% endfor %}
-    </select>
-    <select name="sort" aria-label="{{ _('Sort') }}">
-      {% for k, label in [('deadline', 'Soonest deadline'), ('new', 'Recently added'), ('title', 'Title')] %}
-        <option value="{{ k }}" {{ 'selected' if f.sort == k }}>{{ _(label) }}</option>
-      {% endfor %}
-    </select>
-    <button class="btn primary">{{ _("Filter") }}</button>
-  </div>
-  {% if f.field %}<input type="hidden" name="field" value="{{ f.field }}">{% endif %}
-  {% if f.cat %}<input type="hidden" name="cat" value="{{ f.cat }}">{% endif %}
-  {% for t in f.topics %}<input type="hidden" name="topic" value="{{ t }}">{% endfor %}
 
   <div class="kinds" role="group" aria-label="{{ _('Type') }}">
     {% for k in KIND_ORDER if kind_counts.get(k) or k in f.kinds %}
@@ -109,8 +111,15 @@
   </details>
 </form>
 
+
+
+
 <div class="resultbar">
-  <div><b>{{ calls|length }}</b> {{ _("results") }}{% if urgent %} · <span class="urgtxt">{{ urgent }} {{ _("Closing within 14 days")|lower }}</span>{% endif %}
+  <div class="viewswitch" role="group" aria-label="{{ _('Show') }}">
+    <a href="{{ qs(view='') }}" class="{{ 'on' if view == 'series' }}" {% if view == 'series' %}aria-current="true"{% endif %}>↻ {{ _("Series") }}</a>
+    <a href="{{ qs(view='all') }}" class="{{ 'on' if view == 'all' }}" {% if view == 'all' %}aria-current="true"{% endif %}>{{ _("All: series and calls") }}</a>
+  </div>
+  <div><b>{{ calls|length }}</b> {{ _("calls") }}{% if n_series %} · <b>{{ n_series }}</b> {{ _("series") }}{% endif %}{% if urgent %} · <span class="urgtxt">{{ urgent }} {{ _("Closing within 14 days")|lower }}</span>{% endif %}
     {% if not f.is_default %} · <a href="{{ url_for('main.index') }}">{{ _("Reset") }}</a>{% endif %}</div>
   <div class="calacts">
     <a class="btn ghost" href="{{ url_for('main.calendar_download') }}{{ '?' ~ query_string if query_string }}">📅 {{ _("Download calendar (.ics)") }}</a>
@@ -129,7 +138,11 @@
 
 <div class="cards">
   {% set here = request.full_path %}
-  {% for c in calls %}{{ m.card(c, here) }}{% else %}<p class="empty">{{ _("No calls match these filters.") }}</p>{% endfor %}
+  {% for it in items %}
+    {% if it.kind == 'series' %}{{ m.series_card(it, view == 'all', here) }}
+    {% elif it[0] == 'other' %}{{ m.other_group(it[1], here) }}
+    {% else %}{{ m.card(it[1], here) }}{% endif %}
+  {% else %}<p class="empty">{{ _("No calls match these filters.") }}</p>{% endfor %}
 </div>
 {% endblock %}
 {% block scripts %}

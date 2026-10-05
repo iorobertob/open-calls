@@ -1,9 +1,49 @@
+{# ---- Shared pieces for cards and pages.
+   Colour has one job: the FIELD (a small dot). Red only for urgency (deadline within 14 days).
+   Types, categories and topics are plain text. #}
+
+{% macro icon(name) -%}
+<svg class="ico" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+{%- if name == 'calendar' -%}<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17M12 13v4M10 15h4"/>
+{%- elif name == 'star' -%}<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z"/>
+{%- elif name == 'star-on' -%}<path fill="currentColor" d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z"/>
+{%- elif name == 'search' -%}<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>
+{%- elif name == 'sliders' -%}<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>
+{%- elif name == 'x' -%}<path d="M6 6l12 12M18 6L6 18"/>
+{%- elif name == 'series' -%}<path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M18 3v4h-4M6 21v-4h4"/>
+{%- elif name == 'bell' -%}<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>
+{%- endif -%}
+</svg>
+{%- endmacro %}
+
+{% macro field_dots(keys) -%}
+  {%- for fk in keys %}{% set fl = TAX.field_by_key.get(fk) %}{% if fl %}<span class="fdot" style="--fh:{{ fl.hue }}" title="{{ fl.name(lang) }}"></span>{% endif %}{% endfor -%}
+{%- endmacro %}
+
+{# Deadline block: the date + plain words ("in 4 days", red only when urgent) #}
+{% macro when(c, label=None) %}
+{% set p = c.phase() %}
+<div class="when {{ 'urgent' if p in ('due_today', 'closing_soon') }}">
+  {% if c.deadline %}<small>{{ label or _("Deadline") }}</small><b>{{ c.deadline|fmtdate(lang) }}</b>
+  {% elif c.deadline_word(lang) %}<small>{{ label or _("Deadline") }}</small><b class="word">{{ c.deadline_word(lang) }}</b>{% endif %}
+  <span class="rel">
+    {%- if p == 'closed' %}{{ _("Closed") }}
+    {%- elif p == 'rejected' %}{{ _("Not eligible") }}
+    {%- elif p == 'pending' %}{{ _("Pending review") }}
+    {%- elif c.deadline %}{{ c.days_left()|rel(lang) }}
+    {%- elif p == 'upcoming' %}{{ _("Opens soon") }}
+    {%- elif p == 'rolling' %}{{ _("No fixed deadline") }}{% endif -%}
+  </span>
+</div>
+{% endmacro %}
+
+{# The same words as a small label (detail page) #}
 {% macro phase_badge(c) -%}
-  {%- set p = c.phase() -%}{%- set n = c.days_left() -%}
-  <span class="badge ph-{{ p }}">
+  {%- set p = c.phase() -%}
+  <span class="state {{ 'urgent' if p in ('due_today', 'closing_soon') }}">
   {%- if p == 'due_today' -%}{{ _("Due today") }}
-  {%- elif p in ('closing_soon', 'open') -%}{{ n }} {{ _("day left") if n == 1 else _("days left") }}
-  {%- elif p == 'rolling' -%}{{ _("Rolling") }}
+  {%- elif p in ('closing_soon', 'open') -%}{{ c.days_left()|rel(lang) }}
+  {%- elif p == 'rolling' -%}{{ _("No fixed deadline") }}
   {%- elif p == 'upcoming' -%}{{ _("Opens soon") }}
   {%- elif p == 'closed' -%}{{ _("Closed") }}
   {%- elif p == 'rejected' -%}{{ _("Not eligible") }}
@@ -11,17 +51,17 @@
   </span>
 {%- endmacro %}
 
-{% macro subscribe_button(c, next_url) -%}
+{% macro subscribe_button(c, next_url, compact=False) -%}
   {% if user.is_authenticated %}
     {% set sub = user.is_subscribed(c) %}
     <form method="post" action="{{ url_for('main.unsubscribe' if sub else 'main.subscribe', call_id=c.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="next" value="{{ next_url }}">
-      <button class="btn {{ 'on' if sub else '' }}" title="{{ _('Unsubscribe') if sub else _('Subscribe') }}">
-        {{ '★ ' ~ _('Subscribed') if sub else '☆ ' ~ _('Subscribe') }}</button>
+      <button class="{{ 'iconbtn' if compact else 'btn' }} {{ 'on' if sub }}" title="{{ _('Unsubscribe') if sub else _('Subscribe: deadline reminders by e-mail') }}" aria-label="{{ _('Unsubscribe') if sub else _('Subscribe') }}" aria-pressed="{{ 'true' if sub else 'false' }}">
+        {{ icon('star-on' if sub else 'star') }}{% if not compact %} {{ _('Subscribed') if sub else _('Subscribe') }}{% endif %}</button>
     </form>
   {% else %}
-    <a class="btn ghost" href="{{ url_for('auth.login', next=next_url) }}" title="{{ _('Log in to subscribe') }}">☆ {{ _("Subscribe") }}</a>
+    <a class="{{ 'iconbtn' if compact else 'btn ghost' }}" href="{{ url_for('auth.login', next=next_url) }}" title="{{ _('Log in to subscribe') }}" aria-label="{{ _('Subscribe') }}">{{ icon('star') }}{% if not compact %} {{ _("Subscribe") }}{% endif %}</a>
   {% endif %}
 {%- endmacro %}
 
@@ -32,46 +72,41 @@
       <form method="post" action="{{ url_for('main.unfollow' if on else 'main.follow', series_id=series.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="next" value="{{ next_url }}">
-        <button class="btn {{ 'on' if on else '' }}" title="{{ _('Get an e-mail when this series publishes a new call') }}">
-          {{ ('✓ ' ~ _('Following')) if on else ('＋ ' ~ (_('Follow') if compact else _('Follow series'))) }}</button>
+        <button class="btn small {{ 'on' if on }}" title="{{ _('Get an e-mail when this series publishes a new call') }}">
+          {{ icon('bell') }} {{ _('Following') if on else (_('Follow') if compact else _('Follow series')) }}</button>
       </form>
     {% else %}
-      <a class="btn ghost" href="{{ url_for('auth.login', next=next_url) }}" title="{{ _('Log in to follow') }}">＋ {{ _('Follow') if compact else _('Follow series') }}</a>
+      <a class="btn small ghost" href="{{ url_for('auth.login', next=next_url) }}" title="{{ _('Log in to follow') }}">{{ icon('bell') }} {{ _('Follow') if compact else _('Follow series') }}</a>
     {% endif %}
   {% endif %}
 {%- endmacro %}
 
 {% macro card(c, next_url) %}
 {% set p = c.phase() %}
-<article class="card {{ 'dim' if p in ('closed', 'rejected') }} {{ 'urgent' if p in ('due_today', 'closing_soon') }}"
-         style="--kh:{{ KINDS.get(c.kind, KINDS['other']).hue }}">
+{% set fl0 = TAX.field_by_key.get(c.field_list[0]) if c.field_list else None %}
+{% set disc, fmts = TAX.split_topics(c.topic_list) %}
+<article class="card {{ 'dim' if p in ('closed', 'rejected') }}" style="--fh:{{ fl0.hue if fl0 else 220 }}">
   <div class="cmain">
-    <div class="meta-top">
-      <span class="kind">{{ KINDS.get(c.kind, KINDS['other'])['short_' ~ lang] }}</span>
-      {% for fk in c.field_list %}{% set fl = TAX.field_by_key.get(fk) %}{% if fl %}<span class="ftag" style="--fh:{{ fl.hue }}">{{ fl.name(lang) }}</span>{% endif %}{% endfor %}
-      {% if c.star %}<span class="star" title="{{ _('Best fit') }}">★</span>{% endif %}
-      {% if not c.verified %}<span class="unver" title="{{ _('Not verified — open manually') }}">?</span>{% endif %}
+    <div class="cline">
+      {{ field_dots(c.field_list) }}
+      <span>{{ KINDS.get(c.kind, KINDS['other'])['short_' ~ lang] }}</span>
+      {% if fmts %}<span class="sep">·</span><span>{{ _("includes") }} {% for t in fmts %}{{ topic_label(t) }}{{ ', ' if not loop.last }}{% endfor %}</span>{% endif %}
+      {% if c.star %}<span class="sep">·</span><span class="rec">★ {{ _("Recommended") }}</span>{% endif %}
     </div>
     <h3><a href="{{ url_for('main.detail', call_id=c.id) }}">{{ c.title(lang) }}</a></h3>
-    {% if c.series and not c.series.is_aggregator %}<div class="series-tag"><a href="{{ url_for('main.series_page', series_id=c.series.id) }}">↻ {{ c.series.name(lang) }}</a></div>{% endif %}
+    {% if c.series and not c.series.is_aggregator %}<div class="series-tag"><a href="{{ url_for('main.series_page', series_id=c.series.id) }}">{{ icon('series') }} {{ c.series.name(lang) }}</a></div>{% endif %}
     <div class="org">{{ c.country_code|flag }} {{ c.org_name(lang) }}{% if c.city(lang) %} · {{ c.city(lang) }}{% endif %}{% if c.country(lang) %}, {{ c.country(lang) }}{% endif %}</div>
     {% if c.desc(lang) %}<p class="desc">{{ c.desc(lang) }}</p>{% endif %}
-    <div class="topics">
-      {% for t in c.topic_list %}{% set h = TAX.hue(t) %}{% set tc = TAX.category_of(t) %}<a class="topic {{ 'neutral' if h is none }}" style="--th:{{ h if h is not none else 220 }}" href="{{ url_for('main.index', cat=tc.key if tc else None, topic=t) }}">{{ topic_label(t, lang) }}</a>{% endfor %}
-    </div>
+    {% if disc %}<div class="twords">{% for t in disc[:3] %}{% set tc = TAX.category_of(t) %}<a href="{{ url_for('main.index', field=fl0.key if fl0 else None, cat=tc.key if tc else None, topic=t) }}">{{ topic_label(t) }}</a>{% if not loop.last %} · {% endif %}{% endfor %}{% if disc|length > 3 %} <span>+{{ disc|length - 3 }}</span>{% endif %}</div>{% endif %}
   </div>
   <aside class="cside">
-    <div class="dl">
-      {% if c.deadline %}<small>{{ _("Deadline") }}</small><b>{{ c.deadline|fmtdate(lang) }}</b>
-      {% elif c.deadline_word(lang) %}<b class="word">{{ c.deadline_word(lang) }}</b>{% endif %}
-    </div>
-    {{ phase_badge(c) }}
+    {{ when(c) }}
     <div class="acts">
       {% if c.is_placeholder %}
-        {{ follow_button(c.series, next_url) }}
+        {{ follow_button(c.series, next_url, compact=True) }}
       {% else %}
-        {% if c.deadline or c.event_start %}<a class="btn ghost" href="{{ url_for('main.call_ics', call_id=c.id) }}" title="{{ _('Add to calendar') }}">📅 .ics</a>{% endif %}
-        {{ subscribe_button(c, next_url) }}
+        {% if c.deadline or c.event_start %}<a class="iconbtn" href="{{ url_for('main.call_ics', call_id=c.id) }}" title="{{ _('Add to calendar') }}" aria-label="{{ _('Add to calendar') }}">{{ icon('calendar') }}</a>{% endif %}
+        {{ subscribe_button(c, next_url, compact=True) }}
       {% endif %}
     </div>
   </aside>
@@ -80,23 +115,22 @@
 
 {% macro series_card(g, open_, next_url) %}
 {% set s = g.series %}{% set lead = g.lead %}
-<article class="scard" style="--kh:{{ KINDS.get(s.kind or lead.kind, KINDS['other']).hue }}">
+{% set fl0 = TAX.field_by_key.get(g.fields[0]) if g.fields else None %}
+<article class="scard" style="--fh:{{ fl0.hue if fl0 else 220 }}">
   <div class="shead">
     <div class="cmain">
-      <div class="meta-top">
-        <span class="kind">↻ {{ _("Series") }} · {{ KINDS.get(s.kind or lead.kind, KINDS['other'])['short_' ~ lang] }}</span>
-        {% for fk in g.fields %}{% set fl = TAX.field_by_key.get(fk) %}{% if fl %}<span class="ftag" style="--fh:{{ fl.hue }}">{{ fl.name(lang) }}</span>{% endif %}{% endfor %}
+      <div class="cline">
+        {{ field_dots(g.fields) }}
+        <span>{{ icon('series') }} {{ _("Series") }}</span><span class="sep">·</span>
+        <span>{{ KINDS.get(s.kind or lead.kind, KINDS['other'])['short_' ~ lang] }}</span><span class="sep">·</span>
+        <span>{{ g.calls|length }} {{ _("call") if g.calls|length == 1 else _("calls") }}</span>
       </div>
       <h3><a href="{{ url_for('main.series_page', series_id=s.id) }}">{{ s.name(lang) }}</a></h3>
       <div class="org">{{ lead.country_code|flag }} {{ s.org or lead.org_name(lang) }}</div>
-      <p class="desc scount">{{ g.calls|length }} {{ _("call") if g.calls|length == 1 else _("calls") }}{% if lead.phase() not in ('closed', 'rejected') %} · {{ _("next") }}: <a href="{{ url_for('main.detail', call_id=lead.id) }}">{{ lead.title(lang)|truncate(90) }}</a>{% endif %}</p>
+      {% if lead.phase() not in ('closed', 'rejected') %}<p class="desc">{{ _("next") }}: <a href="{{ url_for('main.detail', call_id=lead.id) }}">{{ lead.title(lang) }}</a></p>{% endif %}
     </div>
     <aside class="cside">
-      <div class="dl">
-        {% if lead.deadline %}<small>{{ _("Next deadline") }}</small><b>{{ lead.deadline|fmtdate(lang) }}</b>
-        {% elif lead.deadline_word(lang) %}<b class="word">{{ lead.deadline_word(lang) }}</b>{% endif %}
-      </div>
-      {{ phase_badge(lead) }}
+      {{ when(lead, _("Next deadline")) }}
       <div class="acts">{{ follow_button(s, next_url, compact=True) }}</div>
     </aside>
   </div>
@@ -110,7 +144,7 @@
 {% macro other_group(calls, next_url) %}
 <article class="scard other">
   <details class="snest">
-    <summary><b>{{ _("Calls not in a series") }}</b> ({{ calls|length }})</summary>
+    <summary>{{ _("Calls not in a series") }} ({{ calls|length }})</summary>
     <div class="nested">{% for c in calls %}{{ card(c, next_url) }}{% endfor %}</div>
   </details>
 </article>

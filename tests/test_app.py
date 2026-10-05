@@ -639,7 +639,7 @@ def test_home_series_view_and_all_view(app):
     c.get("/lang/en")
     html = c.get("/").get_data(as_text=True)              # default = Series view
     assert html.index('class="searchrow"') < html.index('class="explore"')        # search box comes first
-    assert 'class="on" aria-current="true">↻ Series' in html
+    assert 'class="on" aria-current="true">Series' in html
     assert html.count('<article class="scard"') == 1 and "Soundworks" in html
     assert '<details class="snest" >' in html or '<details class="snest">' in html  # collapsed
     assert "Calls not in a series" in html and "SMT events" not in html

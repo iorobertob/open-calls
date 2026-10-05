@@ -30,6 +30,7 @@ class Filters:
         self.q = (args.get("q") or "").strip()
         self.kinds = [k for k in args.getlist("kind") if k]
         self.topics = [t for t in args.getlist("topic") if t]
+        self.formats = [t for t in args.getlist("format") if t]
         self.field = args.get("field") or ""
         self.cat = args.get("cat") or args.get("family") or ""   # "family" = old links
         self.region = args.get("region") or ""
@@ -46,7 +47,7 @@ class Filters:
 
     @property
     def is_default(self):
-        return not any([self.q, self.kinds, self.topics, self.field, self.cat, self.region, self.country, self.date_from,
+        return not any([self.q, self.kinds, self.formats, self.topics, self.field, self.cat, self.region, self.country, self.date_from,
                         self.date_to, self.star, self.remote, self.free, self.mine]) and self.show == "active"
 
 
@@ -113,6 +114,8 @@ def run_search(f: Filters, lang="lt", facets=False):
     ref = date.today()
     rows = _python_filters(_base_query(f).all(), f, ref)
     cat_topics = {d.key for d in tax().disciplines_in(f.cat)} if f.cat else set()
+    if f.formats:   # "includes a workshop / paper / …" — any of the chosen formats
+        rows = [c for c in rows if any(t in f.formats for t in c.topic_list)]
     by_kind = [c for c in rows if not f.kinds or c.kind in f.kinds]
     in_field = [c for c in by_kind if _in_field(c, f)]
     in_cat = [c for c in in_field if _in_cat(c, f, cat_topics)]
@@ -128,7 +131,8 @@ def run_search(f: Filters, lang="lt", facets=False):
     counts = {"kind": kind_counts, "all": len(by_kind),
               "field": Counter(k for c in by_kind for k in c.field_list),
               "cat": cat_counts,
-              "topic": Counter(x for c in in_cat for x in set(c.topic_list))}
+              "topic": Counter(x for c in in_cat for x in set(c.topic_list)),
+              "format": Counter(x for c in result for x in set(c.topic_list) if t.is_format(x))}
     return sort_calls(result, f.sort, lang, ref), counts
 
 

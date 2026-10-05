@@ -61,6 +61,27 @@ def create_app(config=Config):
             return d.isoformat()
         return f"{d.day} {d.strftime('%b %Y')}"
 
+    @app.template_filter("rel")
+    def rel(days, lang="lt"):
+        """Days until a date as plain words: today, tomorrow, in 4 days, in 3 weeks, in 5 months, 2 days ago."""
+        if days is None:
+            return ""
+        lt = lang == "lt"
+        if days < 0:
+            n = -days
+            return f"prieš {n} d." if lt else (f"{n} day ago" if n == 1 else f"{n} days ago")
+        if days == 0:
+            return "šiandien" if lt else "today"
+        if days == 1:
+            return "rytoj" if lt else "tomorrow"
+        if days < 21:
+            return f"po {days} d." if lt else f"in {days} days"
+        if days < 60:
+            w = round(days / 7)
+            return f"po {w} sav." if lt else f"in {w} weeks"
+        mo = round(days / 30.4)
+        return f"po {mo} mėn." if lt else f"in {mo} months"
+
     @app.template_filter("sysmsg")
     def sysmsg(text):
         return render_msg(text, get_lang())

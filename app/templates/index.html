@@ -1,5 +1,14 @@
 {% extends "base.html" %}
 {% import "_macros.html" as m with context %}
+{% set STATUS = [('active', 'Open and upcoming'), ('urgent', 'Closing within 14 days'), ('open', 'Open now'),
+                 ('upcoming', 'Opens soon'), ('closed', 'Closed'), ('rejected', 'Checked — not eligible'), ('all', 'Everything')] %}
+{% set STATUS_D = dict(STATUS) %}
+{% set fsel = TAX.field_by_key.get(f.field) %}
+{% set csel = TAX.cat_by_key.get(f.cat) %}
+{# active filters shown as pills (the field / category / topics have their own controls) #}
+{% set n_active = (1 if f.show != 'active' else 0) + f.kinds|length + f.formats|length + (1 if f.region else 0) + (1 if f.country else 0)
+                  + (1 if f.date_from else 0) + (1 if f.date_to else 0) + (1 if f.remote else 0) + (1 if f.free else 0)
+                  + (1 if f.star else 0) + (1 if f.mine else 0) %}
 {% block content %}
 <section class="hero">
   <h1>{{ _("MISC open calls") }}</h1>
@@ -8,124 +17,113 @@
 
 <form class="filters" method="get" id="filters">
   <div class="searchrow">
-    <input type="search" name="q" value="{{ f.q }}" placeholder="{{ _('Search titles, organisers, descriptions…') }}" aria-label="{{ _('Search') }}">
-    <select name="show" aria-label="{{ _('Status') }}">
-      {% for k, label in [('active', 'Active (open + upcoming)'), ('urgent', 'Closing within 14 days'), ('open', 'Open now'),
-                          ('upcoming', 'Opens soon'), ('closed', 'Closed'), ('rejected', 'Checked — not eligible'), ('all', 'Everything')] %}
-        <option value="{{ k }}" {{ 'selected' if f.show == k }}>{{ _(label) }}</option>
-      {% endfor %}
-    </select>
-    <select name="sort" aria-label="{{ _('Sort') }}">
-      {% for k, label in [('deadline', 'Soonest deadline'), ('new', 'Recently added'), ('title', 'Title')] %}
-        <option value="{{ k }}" {{ 'selected' if f.sort == k }}>{{ _(label) }}</option>
-      {% endfor %}
-    </select>
-    <button class="btn primary">{{ _("Filter") }}</button>
+    <label class="searchbox">{{ m.icon('search') }}
+      <input type="search" name="q" value="{{ f.q }}" placeholder="{{ _('Search calls, organisers, places') }}" aria-label="{{ _('Search') }}"></label>
+    <details class="fdrop" {{ 'open' if request.args.get('panel') }}>
+      <summary class="btn">{{ m.icon('sliders') }} {{ _("Filters") }}{% if n_active %} · {{ n_active }}{% endif %}</summary>
+      <div class="fpanel" role="group" aria-label="{{ _('Filters') }}">
+        <fieldset><legend>{{ _("Status") }}</legend>
+          {% for k, label in STATUS %}<label class="opt"><input type="radio" name="show" value="{{ k }}" {{ 'checked' if f.show == k }}> {{ _(label) }}</label>{% endfor %}
+        </fieldset>
+        <fieldset><legend>{{ _("Type") }}</legend>
+          {% for k in KIND_ORDER if kind_counts.get(k) or k in f.kinds %}
+            <label class="opt"><input type="checkbox" name="kind" value="{{ k }}" {{ 'checked' if k in f.kinds }}> {{ KINDS[k][lang] }} <em>{{ kind_counts.get(k, 0) }}</em></label>
+          {% endfor %}
+          <div class="sublegend">{{ _("Includes") }}</div>
+          {% for d in TAX.formats() if counts.format[d.key] or d.key in f.formats %}
+            <label class="opt"><input type="checkbox" name="format" value="{{ d.key }}" {{ 'checked' if d.key in f.formats }}> {{ d.name(lang) }} <em>{{ counts.format[d.key] }}</em></label>
+          {% endfor %}
+        </fieldset>
+        <fieldset><legend>{{ _("Where and when") }}</legend>
+          <label>{{ _("Region") }}<select name="region"><option value="">{{ _("Any") }}</option>
+            {% for k, v in REGIONS.items() %}<option value="{{ k }}" {{ 'selected' if f.region == k }}>{{ v[lang] }}</option>{% endfor %}</select></label>
+          <label>{{ _("Country") }}<select name="country"><option value="">{{ _("Any") }}</option>
+            {% for code in countries %}<option value="{{ code }}" {{ 'selected' if f.country == code }}>{{ code|flag }} {{ country_name(code, lang) }}</option>{% endfor %}</select></label>
+          <div class="two"><label>{{ _("Deadline from") }}<input type="date" name="from" value="{{ f.date_from or '' }}"></label>
+            <label>{{ _("Deadline to") }}<input type="date" name="to" value="{{ f.date_to or '' }}"></label></div>
+        </fieldset>
+        <fieldset><legend>{{ _("Other") }}</legend>
+          <label class="opt"><input type="checkbox" name="remote" value="1" {{ 'checked' if f.remote }}> {{ _("Remote participation possible") }}</label>
+          <label class="opt"><input type="checkbox" name="free" value="1" {{ 'checked' if f.free }}> {{ _("Free to apply") }}</label>
+          <label class="opt"><input type="checkbox" name="star" value="1" {{ 'checked' if f.star }}> {{ _("Recommended only") }}</label>
+          {% if user.is_authenticated %}<label class="opt"><input type="checkbox" name="mine" value="1" {{ 'checked' if f.mine }}> {{ _("My subscriptions") }}</label>{% endif %}
+        </fieldset>
+        <div class="fpanel-acts">
+          <a class="btn ghost" href="{{ qs(drop=['show', 'kind', 'format', 'region', 'country', 'from', 'to', 'remote', 'free', 'star', 'mine', 'panel']) }}">{{ _("Clear filters") }}</a>
+          <button class="btn primary">{{ _("Show results") }}</button>
+        </div>
+      </div>
+    </details>
   </div>
   {% if f.field %}<input type="hidden" name="field" value="{{ f.field }}">{% endif %}
   {% if f.cat %}<input type="hidden" name="cat" value="{{ f.cat }}">{% endif %}
   {% for t in f.topics %}<input type="hidden" name="topic" value="{{ t }}">{% endfor %}
   {% if view != 'series' %}<input type="hidden" name="view" value="{{ view }}">{% endif %}
+  {% if f.sort != 'deadline' %}<input type="hidden" name="sort" value="{{ f.sort }}">{% endif %}
+</form>
 
-{# ---- Explorer: field → category → sub-disciplines (plain links: shareable, back button works) #}
-{% set fsel = TAX.field_by_key.get(f.field) %}
-{% set csel = TAX.cat_by_key.get(f.cat) %}
+{% if n_active %}
+<div class="pills" aria-label="{{ _('Active filters') }}">
+  {% if f.show != 'active' %}<a class="pill-x" href="{{ qs(show='') }}">{{ _(STATUS_D[f.show]) }} {{ m.icon('x') }}</a>{% endif %}
+  {% for k in f.kinds %}<a class="pill-x" href="{{ qs_toggle('kind', k) }}">{{ KINDS[k][lang] if k in KINDS else k }} {{ m.icon('x') }}</a>{% endfor %}
+  {% for t in f.formats %}<a class="pill-x" href="{{ qs_toggle('format', t) }}">{{ _("includes") }} {{ topic_label(t) }} {{ m.icon('x') }}</a>{% endfor %}
+  {% if f.region %}<a class="pill-x" href="{{ qs(region='') }}">{{ REGIONS[f.region][lang] if f.region in REGIONS else f.region }} {{ m.icon('x') }}</a>{% endif %}
+  {% if f.country %}<a class="pill-x" href="{{ qs(country='') }}">{{ country_name(f.country, lang) }} {{ m.icon('x') }}</a>{% endif %}
+  {% if f.date_from %}<a class="pill-x" href="{{ qs(**{'from': ''}) }}">{{ _("from") }} {{ f.date_from }} {{ m.icon('x') }}</a>{% endif %}
+  {% if f.date_to %}<a class="pill-x" href="{{ qs(to='') }}">{{ _("until") }} {{ f.date_to }} {{ m.icon('x') }}</a>{% endif %}
+  {% if f.remote %}<a class="pill-x" href="{{ qs(remote='') }}">{{ _("Remote participation possible") }} {{ m.icon('x') }}</a>{% endif %}
+  {% if f.free %}<a class="pill-x" href="{{ qs(free='') }}">{{ _("Free to apply") }} {{ m.icon('x') }}</a>{% endif %}
+  {% if f.star %}<a class="pill-x" href="{{ qs(star='') }}">{{ _("Recommended only") }} {{ m.icon('x') }}</a>{% endif %}
+  {% if f.mine %}<a class="pill-x" href="{{ qs(mine='') }}">{{ _("My subscriptions") }} {{ m.icon('x') }}</a>{% endif %}
+  <a class="pill-clear" href="{{ qs(drop=['show', 'kind', 'format', 'region', 'country', 'from', 'to', 'remote', 'free', 'star', 'mine']) }}">{{ _("Clear all") }}</a>
+</div>
+{% endif %}
+
+{# ---- Field → category → topics #}
 <nav class="explore" aria-label="{{ _('Browse by field') }}">
-  <div class="fieldrow" role="list">
-    <a role="listitem" class="fieldtile all {{ 'on' if not f.field }}" href="{{ qs(drop=['field', 'cat', 'topic', 'family']) }}" {% if not f.field %}aria-current="true"{% endif %}>
-      <span class="fname">{{ _("All fields") }}</span><em>{{ counts.all }}</em></a>
+  <div class="fieldtabs" role="list">
+    <a role="listitem" class="{{ 'on' if not f.field }}" href="{{ qs(drop=['field', 'cat', 'topic', 'family']) }}" {% if not f.field %}aria-current="true"{% endif %}>{{ _("All") }} <em>{{ counts.all }}</em></a>
     {% for fl in TAX.fields %}
-      <a role="listitem" class="fieldtile {{ 'on' if f.field == fl.key }}" style="--fh:{{ fl.hue }}"
-         href="{{ qs(field=fl.key, drop=['cat', 'topic', 'family']) }}" {% if f.field == fl.key %}aria-current="true"{% endif %}>
-        <span class="fdot"></span><span class="fname">{{ fl.name(lang) }}</span><em>{{ counts.field[fl.key] }}</em></a>
+      <a role="listitem" class="{{ 'on' if f.field == fl.key }}" style="--fh:{{ fl.hue }}" href="{{ qs(field=fl.key, drop=['cat', 'topic', 'family']) }}" {% if f.field == fl.key %}aria-current="true"{% endif %}>
+        <span class="fdot"></span>{{ fl.name(lang) }} <em>{{ counts.field[fl.key] }}</em></a>
     {% endfor %}
   </div>
-
   {% if f.field or f.cat %}
-  <div class="catrow" role="list" {% if fsel %}style="--fh:{{ fsel.hue }}"{% endif %}>
-    <a role="listitem" class="catchip {{ 'on' if not f.cat }}" href="{{ qs(drop=['cat', 'topic', 'family']) }}">
-      {{ _("All categories") }}</a>
-    {% for c in TAX.categories_for(f.field) %}
-      {% set n = counts.cat[c.key] %}
-      {% if n or f.cat == c.key %}
-      <a role="listitem" class="catchip {{ 'on' if f.cat == c.key }} {{ 'shared' if not c.field_id }}" style="--th:{{ c.hue if c.hue is not none else 220 }}"
-         href="{{ qs(cat=c.key, drop=['topic', 'family']) }}">{{ c.name(lang) }} <em>{{ n }}</em></a>
-      {% endif %}
-    {% endfor %}
+  <div class="taxrow">
+    <label class="catsel"><span>{{ _("Category") }}</span>
+      <select onchange="location.href = this.value" aria-label="{{ _('Category') }}">
+        <option value="{{ qs(drop=['cat', 'topic', 'family']) }}">{{ _("All categories") }}</option>
+        {% for c in TAX.public_categories(f.field) if counts.cat[c.key] or f.cat == c.key %}
+          <option value="{{ qs(cat=c.key, drop=['topic', 'family']) }}" {{ 'selected' if f.cat == c.key }}>{{ c.name(lang) }}</option>
+        {% endfor %}
+      </select></label>
+    {% if csel %}
+      <span class="tlabel">{{ _("Topics") }}</span>
+      {% for d in TAX.disciplines_in(f.cat) if counts.topic[d.key] or d.key in f.topics %}
+        <a class="tchip {{ 'on' if d.key in f.topics }}" href="{{ qs_toggle('topic', d.key) }}" aria-pressed="{{ 'true' if d.key in f.topics else 'false' }}">{{ d.name(lang) }}</a>
+      {% endfor %}
+    {% endif %}
+    {% if f.cat or f.topics %}<a class="clearlink" href="{{ qs(drop=['cat', 'topic', 'family']) }}">{{ _("Clear") }}</a>{% endif %}
   </div>
-  {% endif %}
-
-  {% if csel %}
-  <div class="discrow" role="group" aria-label="{{ _('Sub-disciplines') }}">
-    {% for d in TAX.disciplines_in(f.cat) %}
-      {% set n = counts.topic[d.key] %}
-      {% if n or d.key in f.topics %}
-      <a class="topic {{ 'neutral' if csel.hue is none }} {{ 'sel' if d.key in f.topics }}" style="--th:{{ csel.hue if csel.hue is not none else 220 }}"
-         href="{{ qs_toggle('topic', d.key) }}" aria-pressed="{{ 'true' if d.key in f.topics else 'false' }}">
-         {{ '✓ ' if d.key in f.topics }}{{ d.name(lang) }} <em>{{ n }}</em></a>
-      {% endif %}
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  {% if f.field or f.cat or f.topics %}
-  <p class="trail">
-    {% if fsel %}<span>{{ fsel.name(lang) }}</span>{% endif %}
-    {% if csel %}<span class="sep">›</span><span>{{ csel.name(lang) }}</span>{% endif %}
-    {% if f.topics %}<span class="sep">›</span><span>{% for t in f.topics %}{{ topic_label(t) }}{{ ', ' if not loop.last }}{% endfor %}</span>{% endif %}
-    <a class="clear" href="{{ qs(drop=['field', 'cat', 'topic', 'family']) }}">✕ {{ _("Clear") }}</a>
-  </p>
   {% endif %}
 </nav>
 
-
-  <div class="kinds" role="group" aria-label="{{ _('Type') }}">
-    {% for k in KIND_ORDER if kind_counts.get(k) or k in f.kinds %}
-      <label class="chip" style="--kh:{{ KINDS[k].hue }}">
-        <input type="checkbox" name="kind" value="{{ k }}" {{ 'checked' if k in f.kinds }} data-auto>
-        <span>{{ KINDS[k][lang] }} <em>{{ kind_counts.get(k, 0) }}</em></span>
-      </label>
-    {% endfor %}
-  </div>
-
-  <details class="more" {{ 'open' if f.region or f.country or f.date_from or f.date_to or f.star or f.remote or f.free or f.mine }}>
-    <summary>{{ _("More filters") }}</summary>
-    <div class="grid">
-      <label>{{ _("Region") }}
-        <select name="region" data-auto><option value="">{{ _("Any") }}</option>
-          {% for k, v in REGIONS.items() %}<option value="{{ k }}" {{ 'selected' if f.region == k }}>{{ v[lang] }}</option>{% endfor %}
-        </select></label>
-      <label>{{ _("Country") }}
-        <select name="country" data-auto><option value="">{{ _("Any") }}</option>
-          {% for code in countries %}<option value="{{ code }}" {{ 'selected' if f.country == code }}>{{ code|flag }} {{ country_name(code, lang) }}</option>{% endfor %}
-        </select></label>
-      <label>{{ _("Deadline from") }}<input type="date" name="from" value="{{ f.date_from or '' }}"></label>
-      <label>{{ _("Deadline to") }}<input type="date" name="to" value="{{ f.date_to or '' }}"></label>
-      <div class="checks">
-        <label><input type="checkbox" name="star" value="1" {{ 'checked' if f.star }} data-auto> ★ {{ _("Best fit only") }}</label>
-        <label><input type="checkbox" name="remote" value="1" {{ 'checked' if f.remote }} data-auto> {{ _("Remote participation") }}</label>
-        <label><input type="checkbox" name="free" value="1" {{ 'checked' if f.free }} data-auto> {{ _("Free to apply") }}</label>
-        {% if user.is_authenticated %}<label><input type="checkbox" name="mine" value="1" {{ 'checked' if f.mine }} data-auto> {{ _("My subscriptions") }}</label>{% endif %}
-      </div>
-    </div>
-  </details>
-</form>
-
-
-
-
 <div class="resultbar">
-  <div class="viewswitch" role="group" aria-label="{{ _('Show') }}">
-    <a href="{{ qs(view='') }}" class="{{ 'on' if view == 'series' }}" {% if view == 'series' %}aria-current="true"{% endif %}>↻ {{ _("Series") }}</a>
-    <a href="{{ qs(view='all') }}" class="{{ 'on' if view == 'all' }}" {% if view == 'all' %}aria-current="true"{% endif %}>{{ _("All: series and calls") }}</a>
-  </div>
-  <div><b>{{ calls|length }}</b> {{ _("calls") }}{% if n_series %} · <b>{{ n_series }}</b> {{ _("series") }}{% endif %}{% if urgent %} · <span class="urgtxt">{{ urgent }} {{ _("Closing within 14 days")|lower }}</span>{% endif %}
-    {% if not f.is_default %} · <a href="{{ url_for('main.index') }}">{{ _("Reset") }}</a>{% endif %}</div>
-  <div class="calacts">
-    <a class="btn ghost" href="{{ url_for('main.calendar_download') }}{{ '?' ~ query_string if query_string }}">📅 {{ _("Download calendar (.ics)") }}</a>
+  <div class="rcount">{% if n_series %}{{ _("{0} calls in {1} series").format(calls|length, n_series) }}{% else %}{{ _("{0} calls").format(calls|length) }}{% endif %}{% if urgent %} · <span class="urgtxt">{{ _("{0} closing soon").format(urgent) }}</span>{% endif %}</div>
+  <div class="rtools">
+    <div class="viewswitch" role="group" aria-label="{{ _('Show') }}">
+      <a href="{{ qs(view='') }}" class="{{ 'on' if view == 'series' }}" {% if view == 'series' %}aria-current="true"{% endif %}>{{ _("Series") }}</a>
+      <a href="{{ qs(view='all') }}" class="{{ 'on' if view == 'all' }}" {% if view == 'all' %}aria-current="true"{% endif %}>{{ _("All") }}</a>
+    </div>
+    <select class="sortsel" onchange="location.href = this.value" aria-label="{{ _('Sort') }}">
+      {% for k, label in [('deadline', 'Soonest deadline'), ('new', 'Recently added'), ('title', 'Title')] %}
+        <option value="{{ qs(sort='' if k == 'deadline' else k) }}" {{ 'selected' if f.sort == k }}>{{ _(label) }}</option>
+      {% endfor %}
+    </select>
     <details class="subfeed">
-      <summary class="btn ghost">🔔 {{ _("Subscribe to this list") }}</summary>
+      <summary class="iconbtn" title="{{ _('Calendar') }}" aria-label="{{ _('Calendar') }}">{{ m.icon('calendar') }}</summary>
       <div class="pop">
+        <a class="btn" href="{{ url_for('main.calendar_download') }}{{ '?' ~ query_string if query_string }}">{{ _("Download calendar (.ics)") }}</a>
         <b>{{ _("Subscribe without an account") }}</b>
         <p>{{ _("Copy the link below into your calendar app to follow this filtered list; it updates automatically.") }}</p>
         {% set feed = url_for('main.calendar_feed', _external=True) ~ '?' ~ (query_string ~ '&' if query_string) ~ 'lang=' ~ lang %}
@@ -147,10 +145,17 @@
 {% endblock %}
 {% block scripts %}
 <script>
-// on narrow screens the field row scrolls sideways: bring the selected field into view
-(function(){ var row = document.querySelector('.fieldrow'), on = row && row.querySelector('.fieldtile.on');
+// field tabs scroll sideways on phones: bring the selected one into view
+(function(){ var row = document.querySelector('.fieldtabs'), on = row && row.querySelector('a.on');
   if (row && on && row.scrollWidth > row.clientWidth) row.scrollLeft = on.offsetLeft - row.offsetLeft - 16; })();
-document.querySelectorAll('[data-auto]').forEach(function(el){el.addEventListener('change',function(){document.getElementById('filters').submit()})});
-document.querySelectorAll('#filters select[name=show], #filters select[name=sort]').forEach(function(el){el.addEventListener('change',function(){el.form.submit()})});
+// keep shared links tidy: empty fields are left out of the address
+document.getElementById('filters').addEventListener('submit', function(){
+  this.querySelectorAll('input, select').forEach(function(el){ if (!el.value) el.disabled = true; });
+  var st = this.querySelector('input[name=show]:checked'); if (st && st.value === 'active') st.disabled = true;
+});
+// close the filters panel when clicking outside it or pressing Esc
+(function(){ var d = document.querySelector('.fdrop'); if (!d) return;
+  document.addEventListener('click', function(e){ if (d.open && !d.contains(e.target)) d.open = false; });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') d.open = false; }); })();
 </script>
 {% endblock %}

@@ -173,10 +173,10 @@ def country_name(code, lang):
 
 # (key, name_lt, name_en, hue)
 DEFAULT_FIELDS = [
-    ("music", "Muzika ir garsas", "Music and Sound", 212),
-    ("theatre", "Teatras", "Theatre", 8),
-    ("cinema", "Kinas", "Cinema", 280),
-    ("dance", "Šokis ir performansas", "Dance and Performance", 142),
+    ("music", "Muzika ir garsas", "Music and Sound", 210),
+    ("theatre", "Teatras", "Theatre", 15),
+    ("cinema", "Kinas", "Cinema", 245),
+    ("dance", "Šokis ir performansas", "Dance and Performance", 160),
 ]
 # (key, field key or None = shared by all fields, name_lt, name_en, hue or None, [(discipline key, lt, en), …])
 DEFAULT_TREE = [
@@ -294,6 +294,23 @@ class Tax:
     def disciplines_in(self, cat_key):
         c = self.cat_by_key.get(cat_key)
         return [d for d in self.disciplines if c and d.category_id == c.id]
+
+    # Shared categories (no field) hold *formats* — research, paper, workshop, premiere… Visitors see
+    # them next to the entry type (filter panel, "includes workshop" on cards), not in the field tree.
+    def is_format(self, key):
+        c = self.category_of(key)
+        return bool(c) and c.field_id is None
+
+    def formats(self):
+        return [d for d in self.disciplines if self.is_format(d.key)]
+
+    def public_categories(self, field_key=None):
+        """Categories of a field (or of all fields) — without the shared format categories."""
+        return [c for c in self.categories_for(field_key) if c.field_id is not None]
+
+    def split_topics(self, keys):
+        """(discipline topics, format topics) of an entry."""
+        return [k for k in keys if not self.is_format(k)], [k for k in keys if self.is_format(k)]
 
     def implied_fields(self, topic_keys):
         out = []

@@ -6,11 +6,11 @@
 <article class="detail" style="--kh:{{ KINDS.get(c.kind, KINDS['other']).hue }}">
   <div class="dhead">
     <div>
-      <div class="meta-top">
-        <span class="kind">{{ KINDS.get(c.kind, KINDS['other'])['short_' ~ lang] }}</span>
-        {% for fk in c.field_list %}{% set fl = TAX.field_by_key.get(fk) %}{% if fl %}<a class="ftag" style="--fh:{{ fl.hue }}" href="{{ url_for('main.index', field=fl.key) }}">{{ fl.name(lang) }}</a>{% endif %}{% endfor %}
-        {% if c.star %}<span class="star">★</span>{% endif %}
-        {{ m.phase_badge(c) }}
+      <div class="cline">
+        {% for fk in c.field_list %}{% set fl = TAX.field_by_key.get(fk) %}{% if fl %}<a class="fieldlink" href="{{ url_for('main.index', field=fl.key) }}"><span class="fdot" style="--fh:{{ fl.hue }}"></span>{{ fl.name(lang) }}</a><span class="sep">·</span>{% endif %}{% endfor %}
+        <span>{{ KINDS.get(c.kind, KINDS['other'])['short_' ~ lang] }}</span>
+        {% if c.star %}<span class="sep">·</span><span class="rec">★ {{ _("Recommended") }}</span>{% endif %}
+        <span class="sep">·</span>{{ m.phase_badge(c) }}
       </div>
       <h1>{{ c.title(lang) }}</h1>
       {% set other = c.title_en if lang == 'lt' else c.title_lt %}
@@ -39,7 +39,11 @@
     {{ m.follow_button(c.series, request.path) }}
   </div>
   {% endif %}
-  <div class="topics">{% for t in c.topic_list %}{% set h = TAX.hue(t) %}{% set tc = TAX.category_of(t) %}<a class="topic {{ 'neutral' if h is none }}" style="--th:{{ h if h is not none else 220 }}" href="{{ url_for('main.index', cat=tc.key if tc else None, topic=t) }}">{{ topic_label(t, lang) }}</a>{% endfor %}</div>
+  {% set disc, fmts = TAX.split_topics(c.topic_list) %}
+  <div class="taxrow">
+    {% for t in disc %}{% set tc = TAX.category_of(t) %}{% set tf = TAX.field_of_category(tc) %}<a class="tchip" href="{{ url_for('main.index', field=tf.key if tf else None, cat=tc.key if tc else None, topic=t) }}">{{ topic_label(t, lang) }}</a>{% endfor %}
+    {% if fmts %}<span class="tlabel">{{ _("Includes") }}:</span>{% for t in fmts %}<a class="tchip" href="{{ url_for('main.index', format=t) }}">{{ topic_label(t, lang) }}</a>{% endfor %}{% endif %}
+  </div>
 
   <dl class="facts">
     {% set ns = namespace(fallback=false) %}

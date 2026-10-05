@@ -37,7 +37,7 @@
     {{ field('title_lt', 'Title (LT)', wide=True) }} {{ field('title_en', 'Title (EN)', wide=True) }}
     <label class="wide">{{ _("Series") }}
       <select name="series_id"><option value="">— {{ _("none (a one-off call)") }} —</option>
-        {% for s in SERIES_ALL() %}<option value="{{ s.id }}" {{ 'selected' if c.series_id == s.id }}>{{ s.name(lang) }}</option>{% endfor %}
+        {% for s in SERIES_ALL() %}<option value="{{ s.id }}" {{ 'selected' if c.series_id == s.id }}>{{ s.name(lang) }}{% if s.is_aggregator %} ({{ _("listing page") }}){% endif %}</option>{% endfor %}
       </select></label>
     {{ field('org', 'Organiser (LT)', wide=True) }} {{ field('org_en', 'Organiser (EN)', wide=True) }}
   </fieldset>

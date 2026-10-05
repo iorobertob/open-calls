@@ -32,7 +32,7 @@
   </div>
 
   {% if c.desc(lang) %}<p class="lead">{{ c.desc(lang) }}</p>{% endif %}
-  {% if c.series %}
+  {% if c.series and not c.series.is_aggregator %}
   <div class="seriesbox">
     <div>↻ {{ _("Part of the series") }} <a href="{{ url_for('main.series_page', series_id=c.series.id) }}"><b>{{ c.series.name(lang) }}</b></a>
       <small>{{ _("Follow it to get an e-mail when a new call is published.") }}</small></div>

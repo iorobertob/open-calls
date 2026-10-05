@@ -16,6 +16,8 @@
     <label>{{ _("Usual month of the call (optional)") }}<select name="typical_month"><option value="">{{ _("Work it out from past calls") }}</option>
       {% for i in range(1, 13) %}<option value="{{ i }}" {{ 'selected' if s.typical_month == i }}>{{ i }}</option>{% endfor %}</select></label>
     <label class="inline"><input type="checkbox" name="active" {{ 'checked' if s.active }}> {{ _("Active (check weekly, keep an “expected next call” entry)") }}</label>
+    <label class="inline wide"><input type="checkbox" name="is_aggregator" {{ 'checked' if s.is_aggregator }}> {{ _("This is a listing page with calls from many organisers (an aggregator)") }}</label>
+    <p class="hint wide">{{ _("A listing page is still checked weekly, but each call found there goes to the series it really belongs to (matched by website or by the series name in the title) or stays without a series. It gets no “expected next call” and visitors don't see it as a series.") }}</p>
   </fieldset>
   {% if s.id %}{% set nxt = expected(s) %}
   <p class="hint">{% if nxt %}{{ _("Next call expected around") }} <b>{{ nxt.strftime('%Y-%m') }}</b>. {% endif %}
@@ -30,14 +32,34 @@
     <tr><td>{% if c.is_placeholder %}<i>{{ c.title(lang) }}</i> <small class="hint">({{ _("expected next call — created automatically") }})</small>
         {% else %}<a href="{{ url_for('main.detail', call_id=c.id) }}">{{ c.title(lang) }}</a>{% endif %}<br>
         <small>{{ c.deadline or c.deadline_word(lang) or '—' }} · {{ c.status }}</small></td>
-      <td class="acts"><form method="post" action="{{ url_for('admin.series_action', series_id=s.id) }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="unlink"><input type="hidden" name="call_id" value="{{ c.id }}">
-        <button class="btn ghost">{{ _("Remove from series") }}</button></form></td></tr>
+      <td class="acts">
+        {% if not c.is_placeholder %}
+        <form method="post" action="{{ url_for('admin.series_action', series_id=s.id) }}" class="moveform">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="move"><input type="hidden" name="call_id" value="{{ c.id }}">
+          <select name="target" aria-label="{{ _('Move to series') }}" required>
+            <option value="" disabled selected>{{ _("Move to…") }}</option>
+            <option value="0">— {{ _("no series (a one-off call)") }} —</option>
+            {% for x in SERIES_ALL() if x.id != s.id and not x.is_aggregator %}<option value="{{ x.id }}">{{ x.name(lang) }}</option>{% endfor %}
+          </select>
+          <button class="btn">{{ _("Move") }}</button></form>
+        {% else %}
+        <form method="post" action="{{ url_for('admin.series_action', series_id=s.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="unlink"><input type="hidden" name="call_id" value="{{ c.id }}">
+          <button class="btn ghost">{{ _("Remove") }}</button></form>
+        {% endif %}
+      </td></tr>
   {% else %}<tr><td>—</td></tr>{% endfor %}</table>
-  <details><summary class="hint">{{ _("Add existing entries to this series") }}</summary>
+  {% if s.is_aggregator and s.calls %}
+  <form method="post" action="{{ url_for('admin.series_action', series_id=s.id) }}" class="acts" style="margin:10px 0"
+        data-confirm="{{ _('Move every entry of this listing to the series it belongs to (by website or name)? Entries that match no series are left without one.') }}"
+        data-confirm-title="{{ _('Redistribute entries') }}" data-confirm-ok="{{ _('Redistribute') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="redistribute">
+    <button class="btn primary">⇄ {{ _("Redistribute entries to their own series") }}</button></form>
+  {% endif %}
+  <details><summary class="hint">{{ _("Add existing entries to this series (also moves them from another series)") }}</summary>
     <form method="post" action="{{ url_for('admin.series_action', series_id=s.id) }}" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="link">
-      <select name="call_id" multiple size="10">{% for c in unlinked %}<option value="{{ c.id }}">#{{ c.id }} {{ c.title(lang)|truncate(90) }} ({{ c.deadline or c.status }})</option>{% endfor %}</select>
+      <select name="call_id" multiple size="10">{% for c in unlinked %}<option value="{{ c.id }}">#{{ c.id }} {{ c.title(lang)|truncate(80) }} ({{ c.deadline or c.status }}){% if c.series %} — {{ _("now in") }}: {{ c.series.name(lang) }}{% endif %}</option>{% endfor %}</select>
       <div><button class="btn">{{ _("Add selected") }}</button> <small class="hint">{{ _("Cmd/Ctrl-click to select several") }}</small></div>
     </form>
   </details>

@@ -37,10 +37,7 @@
       </details>
       <button class="btn primary">{{ _("Extract & review") }}</button>
     </form>
-    <p><a href="{{ url_for('admin.new') }}">+ {{ _("Add manually") }}</a> · <a href="{{ url_for('admin.users') }}">{{ _("Users") }}</a>
-      · <a href="{{ url_for('admin.series_list') }}">↻ {{ _("Series") }} ({{ series_count }})</a>
-      · <a href="{{ url_for('admin.taxonomy') }}">{{ _("Fields & disciplines") }}</a>
-      · <a href="{{ url_for('admin.emails') }}">✉ {{ _("E-mails") }}</a>{% if suggestions %} · <a href="{{ url_for('admin.series_suggestions') }}">{{ _("Suggested series") }} ({{ suggestions }})</a>{% endif %}</p>
+    <p><a href="{{ url_for('admin.new') }}">+ {{ _("Add manually") }}</a></p>
   </section>
   <section class="panel">
     <h2>{{ _("Import weekly list") }}</h2>
@@ -61,10 +58,23 @@
   </section>
 </div>
 
-<section class="panel"><h2>{{ _("Suggestions waiting for approval") }} ({{ pending|length }})</h2>
-  <table class="adm">{% for c in pending %}{{ row(c, ['approve', 'delete']) }}{% else %}<tr><td>—</td></tr>{% endfor %}</table></section>
-<section class="panel"><h2>{{ _("Automatic changes to review") }} ({{ review|length }})</h2>
-  <table class="adm">{% for c in review %}{{ row(c, ['reviewed', 'recheck', 'archive']) }}{% else %}<tr><td>—</td></tr>{% endfor %}</table></section>
-<section class="panel"><h2>{{ _("Broken links") }} ({{ broken|length }})</h2>
-  <table class="adm">{% for c in broken %}{{ row(c, ['recheck', 'archive']) }}{% else %}<tr><td>—</td></tr>{% endfor %}</table></section>
+{% for key, title, items, actions in [
+    ('pending', 'Suggestions waiting for approval', pending, ['approve', 'delete']),
+    ('review', 'Automatic changes to review', review, ['reviewed', 'recheck', 'archive']),
+    ('broken', 'Broken links', broken, ['recheck', 'archive'])] %}
+<details class="panel queue" id="q-{{ key }}" data-remember {{ 'open' if items }}>
+  <summary><h2>{{ _(title) }} <span class="qcount {{ 'zero' if not items }}">{{ items|length }}</span></h2></summary>
+  <table class="adm">{% for c in items %}{{ row(c, actions) }}{% else %}<tr><td>—</td></tr>{% endfor %}</table>
+</details>
+{% endfor %}
+{% endblock %}
+{% block scripts %}
+<script>
+// collapsible queues: remember what the admin opened or closed (falls back to "open when not empty")
+document.querySelectorAll('details[data-remember]').forEach(function(d){
+  var k = 'misc-admin-' + d.id;
+  try { var v = localStorage.getItem(k); if (v !== null) d.open = (v === '1'); } catch (e) {}
+  d.addEventListener('toggle', function(){ try { localStorage.setItem(k, d.open ? '1' : '0'); } catch (e) {} });
+});
+</script>
 {% endblock %}

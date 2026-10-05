@@ -295,3 +295,23 @@ code.key{min-width:92px}
 .txform input[name=name_lt],.txform input[name=name_en]{width:140px}
 .txform select{max-width:170px}
 .txform.del select{max-width:150px}
+
+/* ---- admin menu bar and collapsible queues */
+.adminnav{display:flex;gap:4px;flex-wrap:wrap;margin:16px 0 4px;padding:6px;background:var(--card);border:1px solid var(--line);border-radius:12px}
+.adminnav a{padding:7px 12px;border-radius:8px;text-decoration:none;color:var(--mut);font-weight:600;font-size:14px}
+.adminnav a:hover{color:var(--fg);background:var(--soft)}
+.adminnav a.on{background:var(--acc);color:var(--accfg)}
+@media (max-width:760px){.adminnav{flex-wrap:nowrap;overflow-x:auto}.adminnav a{white-space:nowrap}}
+details.queue{padding:0}
+details.queue summary{list-style:none;cursor:pointer;padding:14px 18px;display:flex;align-items:center}
+details.queue summary::-webkit-details-marker{display:none}
+details.queue summary::before{content:"▸";color:var(--mut);margin-right:10px;transition:transform .15s;display:inline-block}
+details.queue[open] summary::before{transform:rotate(90deg)}
+@media (prefers-reduced-motion:reduce){details.queue summary::before{transition:none}}
+details.queue summary h2{margin:0;display:flex;align-items:center;gap:10px}
+details.queue > table{margin:0 18px 14px;width:calc(100% - 36px)}
+.qcount{font-size:13px;font-weight:700;background:var(--urgbg);color:var(--urg);border-radius:999px;padding:1px 9px}
+.qcount.zero{background:var(--soft);color:var(--mut)}
+
+.moveform{display:inline-flex;gap:6px;align-items:center}
+.moveform select{width:auto;max-width:220px;font-size:13.5px;padding:5px 8px}

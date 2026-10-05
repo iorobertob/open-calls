@@ -322,6 +322,9 @@ class Series(db.Model):
     recurrence = db.Column(db.String(16), default="yearly")  # yearly | twice_yearly | rolling | irregular
     typical_month = db.Column(db.Integer)                 # month a new call usually appears (1–12), optional
     active = db.Column(db.Boolean, default=True, nullable=False)
+    # A listing page with calls from many organisers (e.g. a society's events page). It is still
+    # checked weekly, but what it finds goes to the series it really belongs to (or none).
+    is_aggregator = db.Column(db.Boolean, default=False, nullable=False, server_default=db.false())
     created_at = db.Column(db.DateTime, default=utcnow)
     last_checked_at = db.Column(db.DateTime)
     last_http_status = db.Column(db.Integer)

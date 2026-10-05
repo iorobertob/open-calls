@@ -15,7 +15,7 @@
   {% set live = s.calls|selectattr('is_active')|rejectattr('is_placeholder')|list %}
   {% set nxt = expected(s) %}
   <tr>
-    <td><a href="{{ url_for('admin.series_edit', series_id=s.id) }}"><b>{{ s.name(lang) }}</b></a> {% if not s.active %}<small class="hint">({{ _("paused") }})</small>{% endif %}<br>
+    <td><a href="{{ url_for('admin.series_edit', series_id=s.id) }}"><b>{{ s.name(lang) }}</b></a> {% if not s.active %}<small class="hint">({{ _("paused") }})</small>{% endif %}{% if s.is_aggregator %} <span class="badge ph-closed">{{ _("listing page") }}</span>{% endif %}<br>
       <small>{{ _(REC.get(s.recurrence, 'Irregular')) }} · {{ s.calls|rejectattr('is_placeholder')|list|length }} {{ _("calls") }} · {{ _("Followers") }}: {{ s.followers|length }}
       · {% if live %}{{ _("current call:") }} {{ live[0].deadline or live[0].deadline_word(lang) }}{% elif nxt %}{{ _("next expected:") }} {{ nxt.strftime('%Y-%m') }}{% else %}—{% endif %}
       · {{ _("checked") }} {{ s.last_checked_at.strftime('%Y-%m-%d') if s.last_checked_at else '—' }}</small></td>

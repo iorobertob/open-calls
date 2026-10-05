@@ -538,3 +538,90 @@ def test_classify_adds_fields_only(app, monkeypatch):
     changes = classify.classify_all()
     db.session.refresh(call)
     assert changes == [(2, "Later residency", ["dance"])] and call.field_list == ["music", "dance"]
+
+
+# ---------------------------------------------------------------- moving entries between series / listing pages
+
+def _series(**kw):
+    from app.models import Series
+    s = Series(recurrence="yearly", active=True, **kw)
+    db.session.add(s)
+    db.session.flush()
+    return s
+
+
+def test_move_entry_between_series(app):
+    from app.models import CallChange, Notification, SeriesFollow
+    smt = _series(name_en="SMT events", url="https://societymusictheory.org/events")
+    icmc = _series(name_en="ICMC", url="https://icmc2027.example/")
+    fan = User(email="fan@lmta.lt")
+    db.session.add(fan)
+    db.session.flush()
+    db.session.add(SeriesFollow(user_id=fan.id, series_id=icmc.id))
+    call = db.session.get(Call, 2)
+    call.series_id = smt.id
+    db.session.commit()
+    c = app.test_client()
+    login(c)
+    c.post(f"/admin/series/{smt.id}/action", data={"action": "move", "call_id": "2", "target": str(icmc.id)})
+    assert db.session.get(Call, 2).series_id == icmc.id
+    assert CallChange.query.filter_by(call_id=2, field="series_id").one().new == str(icmc.id)      # in its history
+    assert Notification.query.filter_by(user_id=fan.id, call_id=2, kind="series_new").count() == 1  # new series' followers told
+    c.post(f"/admin/series/{icmc.id}/action", data={"action": "move", "call_id": "2", "target": "0"})
+    assert db.session.get(Call, 2).series_id is None                                                # → no series
+    # "add existing entries" also takes entries from another series
+    db.session.get(Call, 1).series_id = smt.id
+    db.session.commit()
+    c.post(f"/admin/series/{icmc.id}/action", data={"action": "link", "call_id": ["1"]})
+    assert db.session.get(Call, 1).series_id == icmc.id
+
+
+def test_match_series_by_site_or_name(app):
+    from app.series import match_series
+    _series(name_en="ICMC", url="https://www.icmc2027.example/cfp")
+    _series(name_en="NIME", url="https://nime.org")
+    _series(name_en="SMT events", url="https://societymusictheory.org/events", is_aggregator=True)
+    db.session.commit()
+    by_site = Call(title_en="Whatever", url="https://icmc2027.example/papers")
+    by_name = Call(title_en="NIME 2027 — Call for Music", url="https://other.example/nime27")
+    neither = Call(title_en="Some symposium", url="https://societymusictheory.org/events/123")
+    assert match_series(by_site).name_en == "ICMC" and match_series(by_name).name_en == "NIME"
+    assert match_series(neither) is None                                   # listing pages are never the match
+
+
+def test_listing_page_scan_files_calls_under_their_own_series(app, monkeypatch):
+    from app import series as series_mod
+    from app.extract import Extraction, Page
+    listing = _series(name_en="SMT events", url="https://societymusictheory.org/events", is_aggregator=True)
+    nime = _series(name_en="NIME", url="https://nime.org")
+    db.session.commit()
+    base = {f: "" for f in Extraction.model_fields} | {"is_call": True, "status": "open", "kind": "conference",
+                                                        "topics": [], "fields": [], "star": False, "confidence": "high"}
+    found = [Extraction(**base | {"title_en": "NIME 2027 — Call for Papers", "deadline": "2027-02-01", "url": "https://nime.org/2027"}),
+             Extraction(**base | {"title_en": "Analysis Symposium 2027", "deadline": "2027-03-01", "url": "https://uni.example/sym"})]
+
+    class Resp:
+        stop_reason = "end_turn"
+        parsed_output = type("Scan", (), {"new_calls": found})()
+    monkeypatch.setattr("app.extract.parse_with_fallback", lambda **kw: Resp())
+    created = series_mod.scan_series(listing, Page(url=listing.url, status=200, text="..."))
+    db.session.commit()
+    by_title = {c.title_en: c.series_id for c in created}
+    assert by_title == {"NIME 2027 — Call for Papers": nime.id, "Analysis Symposium 2027": None}
+    assert series_mod.ensure_placeholder(listing) is None                  # listings get no "expected next call"
+
+
+def test_redistribute_and_listing_hidden_from_visitors(app):
+    from app.series import redistribute
+    listing = _series(name_en="SMT events", url="https://societymusictheory.org/events", is_aggregator=True)
+    other = _series(name_en="Soon conf", url="https://elsewhere.example")
+    for i in (1, 2):
+        db.session.get(Call, i).series_id = listing.id
+    db.session.commit()
+    c = app.test_client()
+    c.get("/lang/en")
+    assert "SMT events" not in c.get("/call/1").get_data(as_text=True)       # not shown as "part of the series"
+    moved, loose = redistribute(listing)
+    db.session.commit()
+    assert (moved, loose) == (1, 1)                                        # "Soon conf" matched by name, the other none
+    assert db.session.get(Call, 1).series_id == other.id and db.session.get(Call, 2).series_id is None

@@ -11,7 +11,8 @@ from .i18n import get_lang, tr
 from .importer import apply_record, import_payload, load_payload, parse_date
 from .models import PAIR_FIELDS, SINGLE_PAIRS, STATUSES, Call, CallChange, RefreshRun, Series, User, db, today
 from .refresh import check_call, check_series, run_refresh
-from .series import expected_next, link_series, notify_change, on_publish, series_name_from, suggest_groups
+from .series import (expected_next, link_series, move_to_series, notify_change, on_publish, redistribute,
+                     series_name_from, suggest_groups)
 from .translate import pending as pending_translations
 from .translate import translate_call
 from .messages import msg
@@ -272,6 +273,7 @@ def _form_to_series(s):
     m = request.form.get("typical_month", "")
     s.typical_month = int(m) if m.isdigit() and 1 <= int(m) <= 12 else None
     s.active = request.form.get("active") == "on"
+    s.is_aggregator = request.form.get("is_aggregator") == "on"
 
 
 @bp.route("/series/new", methods=["GET", "POST"])
@@ -289,8 +291,10 @@ def series_edit(series_id=None):
         db.session.commit()
         flash(tr("Saved."), "ok")
         return redirect(url_for(".series_edit", series_id=s.id))
-    unlinked = (Call.query.filter(Call.series_id.is_(None), Call.is_placeholder.is_(False))
-                .order_by(Call.title_en).all() if s.id else [])
+    # every entry not in this series (also those in other series — choosing one moves it here)
+    unlinked = (Call.query.filter((Call.series_id.is_(None)) | (Call.series_id != s.id), Call.is_placeholder.is_(False),
+                                  Call.status != "archived")
+                .order_by(Call.series_id.isnot(None), Call.title_en).all() if s.id else [])
     return render_template("admin/series_form.html", s=s, expected=expected_next, unlinked=unlinked)
 
 
@@ -306,11 +310,20 @@ def series_action(series_id):
     elif act == "link":
         ids = [int(x) for x in request.form.getlist("call_id") if x.isdigit()]
         for c in Call.query.filter(Call.id.in_(ids)).all():
-            c.series_id = s.id
-            db.session.add(CallChange(call_id=c.id, origin="admin", user_id=current_user.id, field="series_id",
-                                      new=str(s.id)))
+            move_to_series(c, s, user_id=current_user.id)
         db.session.commit()
         flash(tr("{0} entries added to the series.").format(len(ids)), "ok")
+    elif act == "move":
+        c = db.get_or_404(Call, int(request.form["call_id"]))
+        tid = _int(request.form.get("target"))
+        target = db.session.get(Series, tid) if tid else None     # 0 = no series
+        move_to_series(c, target, user_id=current_user.id)
+        db.session.commit()
+        flash((tr("Moved to {0}.").format(target.name(get_lang())) if target else tr("Removed from the series.")), "ok")
+    elif act == "redistribute":
+        moved, loose = redistribute(s, user_id=current_user.id)
+        db.session.commit()
+        flash(tr("{0} entries moved to their own series, {1} left without a series.").format(moved, loose), "ok")
     elif act == "unlink":
         c = db.get_or_404(Call, int(request.form["call_id"]))
         if c.is_placeholder:

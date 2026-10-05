@@ -90,7 +90,7 @@ def placeholder_of(series):
 
 def ensure_placeholder(series):
     """Create the 'expected next call' entry when a recurring series has no live call."""
-    if not series.active or has_live_call(series) or placeholder_of(series):
+    if not series.active or series.is_aggregator or has_live_call(series) or placeholder_of(series):
         return None
     when = expected_next(series)
     if not when:
@@ -121,16 +121,65 @@ def retire_placeholder(series):
         db.session.delete(ph)
 
 
-def link_series(call):
-    """Attach a new call to a series automatically when its link is on exactly one series' website."""
-    if call.series_id or not call.url:
-        return None
+def match_series(call, exclude=None):
+    """The (non-listing) series a call belongs to: same website as exactly one series, else the series'
+    name appearing in the call's title (e.g. "ICMC 2027 — Call for Papers" → series "ICMC"). None if unclear."""
+    candidates = [s for s in Series.query.filter_by(active=True, is_aggregator=False).all()
+                  if not exclude or s.id != exclude.id]
     h = host(call.url)
-    matches = [s for s in Series.query.filter_by(active=True).all() if s.url and host(s.url) == h]
-    if len(matches) == 1:
-        call.series_id = matches[0].id
-        return matches[0]
-    return None
+    by_host = [s for s in candidates if s.url and host(s.url) == h] if h else []
+    if len(by_host) == 1:
+        return by_host[0]
+    title = norm_title(f"{call.title_en or ''} {call.title_lt or ''}")
+    by_name = []
+    for s in (by_host or candidates):
+        for name in {norm_title(s.name_en), norm_title(s.name_lt)}:
+            if len(name) >= 4 and re.search(rf"(^| ){re.escape(name)}( |$)", title):
+                by_name.append(s)
+                break
+    return by_name[0] if len(by_name) == 1 else None
+
+
+def link_series(call):
+    """Attach a new call to its series automatically (see match_series)."""
+    if call.series_id or not (call.url or call.title_en or call.title_lt):
+        return None
+    s = match_series(call)
+    if s:
+        call.series_id = s.id
+    return s
+
+
+def move_to_series(call, target, user_id=None, origin="admin"):
+    """Move a call to another series (or to none). Logged; followers of the new series are told if it is new to them."""
+    old = call.series_id
+    new = target.id if target else None
+    if old == new:
+        return False
+    call.series_id = new
+    db.session.add(CallChange(call_id=call.id, origin=origin, user_id=user_id, field="series_id",
+                              old="" if old is None else str(old), new="" if new is None else str(new)))
+    if target and call.status in ("open", "watch") and not call.is_placeholder:
+        call.announced_at = None     # new to this series' followers
+        on_publish(call)
+    return True
+
+
+def redistribute(series, user_id=None):
+    """Re-sort the entries of a listing series: each goes to the series it matches, or to none.
+    Returns (moved_to_other_series, left_without_series)."""
+    moved = loose = 0
+    for c in calls_of(series):
+        if c.is_placeholder:
+            db.session.delete(c)
+            continue
+        target = match_series(c, exclude=series)
+        move_to_series(c, target, user_id=user_id, origin="series")
+        if target:
+            moved += 1
+        else:
+            loose += 1
+    return moved, loose
 
 
 def on_publish(call):
@@ -170,9 +219,10 @@ GENERIC_HOSTS = {"docs.google.com", "drive.google.com", "forms.gle", "facebook.c
 def suggest_groups():
     """Entries without a series, grouped by website — candidates for a series (2+ entries each)."""
     groups = defaultdict(list)
+    listings = {host(s.url) for s in Series.query.filter_by(is_aggregator=True).all() if s.url}
     for c in Call.query.filter(Call.series_id.is_(None), Call.is_placeholder.is_(False)).all():
         h = host(c.url)
-        if h and h not in GENERIC_HOSTS:
+        if h and h not in GENERIC_HOSTS and h not in listings:
             groups[h].append(c)
     return sorted(((h, cs) for h, cs in groups.items() if len(cs) >= 2), key=lambda x: -len(x[1]))
 
@@ -196,8 +246,9 @@ def scan_series(series, page):
     from .extract import SYSTEM_PROMPT, extraction_model, parse_with_fallback, taxonomy_brief
     Scan = create_model("Scan", new_calls=(List[extraction_model()], ...))
 
+    pool = Call.query.filter(Call.status != "archived").all() if series.is_aggregator else calls_of(series)
     known = [{"title": c.title_en or c.title_lt, "deadline": c.deadline.isoformat() if c.deadline else "",
-              "url": c.url} for c in calls_of(series) if not c.is_placeholder]
+              "url": c.url} for c in pool if not c.is_placeholder]
     prompt = (f"Today is {today().isoformat()}. This is the page of a recurring series: {series.name('en')} "
               f"({series.url}).\nCalls already in our database for this series:\n{known}\n\n"
               "List ONLY calls on this page that are NOT already in our database and are currently open or "
@@ -220,11 +271,13 @@ def scan_series(series, page):
         data["url"] = data.get("url") or series.url
         if find_duplicates(data["url"], [ex.title_en, ex.title_lt]):
             # same link or similar title already known: only a new deadline makes it new
-            if any(c.deadline and c.deadline.isoformat() == ex.deadline for c in calls_of(series)) or not ex.deadline:
+            if any(c.deadline and c.deadline.isoformat() == ex.deadline for c in (pool if series.is_aggregator else calls_of(series))) or not ex.deadline:
                 continue
-        c = Call(series_id=series.id, first_seen=today().isoformat(), source=msg("found_in_series",
-                 name=series.name("en")), source_url=series.url, needs_review=True)
+        c = Call(series_id=None if series.is_aggregator else series.id, first_seen=today().isoformat(),
+                 source=msg("found_in_series", name=series.name("en")), source_url=series.url, needs_review=True)
         apply_record(c, to_record(data))
+        if series.is_aggregator:
+            link_series(c)          # its own series (by website / name), or none
         c.status, c.verified = "pending", True
         c.review_reason = msg("found_in_series", name=series.name("en"))
         db.session.add(c)

@@ -1,0 +1,13 @@
+{# Admin menu, shown on every admin page (included from base.html) #}
+{% set ep = request.endpoint or '' %}
+<nav class="adminnav" aria-label="{{ _('Admin') }}">
+  {% for endpoint, label, active in [
+      ('admin.dashboard', 'Dashboard', ep in ('admin.dashboard', 'admin.new', 'admin.edit', 'admin.import_url')),
+      ('admin.series_list', 'Series', ep in ('admin.series_list', 'admin.series_edit')),
+      ('admin.series_suggestions', 'Suggested series', ep == 'admin.series_suggestions'),
+      ('admin.taxonomy', 'Fields & disciplines', ep == 'admin.taxonomy'),
+      ('admin.emails', 'E-mails', ep in ('admin.emails', 'admin.email_detail', 'admin.email_test')),
+      ('admin.users', 'Users', ep == 'admin.users')] %}
+    <a href="{{ url_for(endpoint) }}" class="{{ 'on' if active }}" {% if active %}aria-current="page"{% endif %}>{{ _(label) }}</a>
+  {% endfor %}
+</nav>

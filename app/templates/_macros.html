@@ -53,7 +53,7 @@
       {% if not c.verified %}<span class="unver" title="{{ _('Not verified — open manually') }}">?</span>{% endif %}
     </div>
     <h3><a href="{{ url_for('main.detail', call_id=c.id) }}">{{ c.title(lang) }}</a></h3>
-    {% if c.series %}<div class="series-tag"><a href="{{ url_for('main.series_page', series_id=c.series.id) }}">↻ {{ c.series.name(lang) }}</a></div>{% endif %}
+    {% if c.series and not c.series.is_aggregator %}<div class="series-tag"><a href="{{ url_for('main.series_page', series_id=c.series.id) }}">↻ {{ c.series.name(lang) }}</a></div>{% endif %}
     <div class="org">{{ c.country_code|flag }} {{ c.org_name(lang) }}{% if c.city(lang) %} · {{ c.city(lang) }}{% endif %}{% if c.country(lang) %}, {{ c.country(lang) }}{% endif %}</div>
     {% if c.desc(lang) %}<p class="desc">{{ c.desc(lang) }}</p>{% endif %}
     <div class="topics">

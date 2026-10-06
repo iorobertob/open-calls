@@ -563,7 +563,7 @@ function cardHtml(c){
   var urgent=CONFIG.markUrgent && dleft!==null && dleft>=0 && dleft<=CONFIG.urgentDays;
   var pLt=placeHtml(c.cityLt, c.countryLt), pEn=placeHtml(c.cityEn, c.countryEn);
   var descMain=c.descLt||c.descEn, descEn=(c.descLt && c.descEn && c.descEn!==c.descLt) ? c.descEn : '';
-  return '<div class="card'+(urgent?' urgent':'')+(s?' series':'')+'">'+
+  return '<a class="card'+(urgent?' urgent':'')+(s?' series':'')+'" href="'+esc(c.href||c.url)+'">'+
     '<div class="vis">'+visualFor(c)+
       '<div class="visLabel">'+esc(c.cityEn||c.countryEn||'')+'</div></div>'+
     '<div class="body">'+
@@ -592,7 +592,7 @@ function cardHtml(c){
          : '<div class="scan"><b>Skenuok</b>Scan for details</div>')+
       '<div class="host">'+esc(hostOf(c.url))+'</div>'+
     '</div>'+
-  '</div>';
+  '</a>';
 }
 
 function fillerHtml(){
@@ -762,9 +762,6 @@ document.addEventListener('keydown', function(e){
   else if(k==='f') toggleFull();
   else if(k==='s') location.href=CONFIG.searchUrl;
 });
-document.addEventListener('click', function(e){
-  if(e.target.closest && e.target.closest('#ctl, .navarrow')) return;
-  go(1);
-});
+/* clicks open a card (its own link); slides change only with the keys and the side arrows */
 fit(); render(); restart(); updateCtl();
 if(!isFull()) wake(); else document.body.classList.add('idle');

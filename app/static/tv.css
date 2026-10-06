@@ -238,3 +238,9 @@ h2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow
   stroke-linecap:round;stroke-linejoin:round}
 .navarrow:hover,.navarrow:focus-visible{color:rgba(255,255,255,.9);background:rgba(255,255,255,.04);outline:none}
 body.idle .navarrow{opacity:0;pointer-events:none}
+
+/* a card is a link to its entry (series card → series page) */
+a.card{color:inherit;text-decoration:none;transition:border-color .2s,transform .2s}
+a.card:hover{border-color:rgba(255,255,255,.32)}
+a.card:focus-visible{outline:calc(3px / var(--s)) solid #fff;outline-offset:calc(3px / var(--s))}
+body.idle a.card:hover{border-color:rgba(255,255,255,.09)}

@@ -43,13 +43,15 @@ def _item(c, t, series=None, n=1):
         "deadlineWordLt": c.deadline_word("lt"), "deadlineWordEn": c.deadline_word("en"),
         "descLt": c.desc("lt"), "descEn": c.desc("en"),
         "topics": [{"lt": t.label(k, "lt"), "en": t.label(k, "en")} for k in (disc + fmts)[:4]],
-        "url": c.url or url_for("main.detail", call_id=c.id, _external=True),
+        "url": c.url or url_for("main.detail", call_id=c.id, _external=True),   # QR code
+        "href": url_for("main.detail", call_id=c.id),                            # click on the card
         "series": None,
     }
     if series:
         item["series"] = {"lt": series.name("lt"), "en": series.name("en"), "n": n}
         # one scan shows every call of the series
         item["url"] = url_for("main.series_page", series_id=series.id, _external=True)
+        item["href"] = url_for("main.series_page", series_id=series.id)
     return item
 
 

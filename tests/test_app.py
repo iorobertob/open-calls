@@ -669,6 +669,8 @@ def test_tv_home(app):
     assert items["Soon conf"]["series"] == {"lt": "Soundworks", "en": "Soundworks", "n": 1}
     assert items["Soon conf"]["url"] == f"https://misc.lmta.lt/open-calls/series/{sw.id}"
     assert items["Later residency"]["series"] is None
+    assert items["Soon conf"]["href"] == f"/open-calls/series/{sw.id}"                # the card opens the series page
+    assert items["Later residency"]["href"].startswith("/open-calls/call/")
     assert all(i["field"] in {f["key"] for f in data["fields"]} for i in data["items"])
     assert data["config"]["searchUrl"] == "/open-calls/search"
     # old links keep working

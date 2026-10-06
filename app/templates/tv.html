@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="lt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MISC · Atviri kvietimai · Open calls</title>
+<meta name="description" content="Open calls for LMTA students, teachers, artists and researchers — Music Innovation Studies Centre.">
+<link rel="icon" href="{{ url_for('static', filename='misc-logo.png') }}">
+<script>
+  /* phones go to the search page (the screen is unreadable that small); ?tv=1 forces the screen */
+  if (!/[?&]tv=1\b/.test(location.search) && Math.min(screen.width, screen.height) < 600)
+    location.replace({{ tv.config.searchUrl|tojson }});
+</script>
+<link rel="stylesheet" href="{{ url_for('static', filename='tv.css', v=v) }}">
+</head>
+<body>
+<noscript><p style="color:#eef1f7;font:20px system-ui;padding:2em">
+  <a style="color:#9fb4ff" href="{{ tv.config.searchUrl }}">Visi kvietimai ir paieška · All open calls &amp; search →</a></p></noscript>
+
+<div id="fit"><div id="stage">
+  <div id="bar">
+    <div id="logoSlot"></div>
+    <div id="barmid">
+      <div id="sectionLt"></div>
+      <div id="sectionEn"></div>
+    </div>
+    <div id="barright">
+      <div id="brandLine">Atviri kvietimai · Open calls</div>
+      <div id="nextUp"></div>
+      <div id="dateLine"></div>
+    </div>
+  </div>
+  <div id="grid"></div>
+  <div id="cover"></div>
+  <div id="foot"><span id="footLeft"></span><span id="footRight"></span></div>
+  <div id="prog"></div>
+</div></div>
+
+<nav id="ctl" aria-label="Screen controls">
+  <a href="{{ tv.config.searchUrl }}">⌕ Paieška · Search</a>
+  <button id="ctlFs" type="button" title="F">⛶ <span>Visas ekranas · Fullscreen</span></button>
+  <button id="ctlPlay" type="button">❚❚</button>
+</nav>
+
+<script>window.TV = {{ tv|tojson }};</script>
+<script src="{{ url_for('static', filename='tv.js', v=v) }}"></script>
+</body>
+</html>

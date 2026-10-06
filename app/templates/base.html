@@ -12,7 +12,7 @@
 <body>
 <header class="top">
   <div class="in">
-    <a class="brand" href="{{ url_for('main.index') }}">
+    <a class="brand" href="{{ url_for('main.tv') }}">
       <img src="{{ url_for('static', filename='misc-logo.png') }}" alt="MISC" width="40" height="40">
       <span><b>{{ _("Open calls") }}</b><small>MISC · {{ _("Lithuanian Academy of Music and Theatre") }}</small></span>
     </a>
@@ -46,7 +46,7 @@
 </main>
 <footer class="foot wrap">
   <span>© LMTA · <a href="https://misc.lmta.lt">{{ _("Music Innovation Studies Centre") }}</a></span>
-  <span><a href="{{ url_for('main.api_export') }}">JSON</a> · <a href="{{ url_for('main.screen') }}">TV</a></span>
+  <span><a href="{{ url_for('main.api_export') }}">JSON</a> · <a href="{{ url_for('main.tv', tv=1) }}">{{ _("Screen") }}</a></span>
 </footer>
 
 {# Site-wide modal used instead of the browser's alert()/confirm().

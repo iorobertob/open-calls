@@ -8,7 +8,8 @@ The database is seeded with the list the MISC coordinator curated on 2026‑09�
 
 | | |
 |---|---|
-| **Browse & filter** | The home page starts with four **fields**: Music and Sound, Theatre, Cinema, Dance and Performance. Choosing a field shows its **categories**, and choosing a category shows its **sub-disciplines** (several can be selected: any of them). Each choice shows how many results it gives. Also: full‑text search, type, status, region, country, deadline range, best fit (★), remote, free. Everything is in the URL, so views can be shared. Admins edit the field → category → sub‑discipline tree in **Admin → Fields & disciplines**. |
+| **Screen (home page)** | The home page is a full‑screen slideshow of the open calls, made for the screen in the music centre and for any laptop or desktop: it fills the whole window at any size or shape. Calls are grouped by field and sorted by deadline; a series appears once, as its next call ("Series · 3 calls"), and its QR code opens the series page. Every card has its own generated picture. The first slide has a QR code to the search page. Phones go straight to the search page. See *The screen in the music centre* below. |
+| **Browse & filter** | The search page (`/search`, *Open calls* in the menu) starts with four **fields**: Music and Sound, Theatre, Cinema, Dance and Performance. Choosing a field shows its **categories**, and choosing a category shows its **sub-disciplines** (several can be selected: any of them). Each choice shows how many results it gives. Also: full‑text search, type, status, region, country, deadline range, best fit (★), remote, free. Everything is in the URL, so views can be shared. Admins edit the field → category → sub‑discipline tree in **Admin → Fields & disciplines**. |
 | **Live status** | Status labels and "N days left" are worked out from the dates on every request. Nothing goes stale between refresh runs. |
 | **Add by link** | An admin pastes a URL. The app fetches the organiser's page, Claude extracts the fields using the MISC curation criteria (scope, geography rules, eligibility traps), and the admin reviews the pre‑filled form before saving. Without an API key, a basic extractor fills in the title, description and deadline. |
 | **Manual entry / edit** | Full edit form. Every change is logged in the entry's history. |
@@ -20,7 +21,7 @@ The database is seeded with the list the MISC coordinator curated on 2026‑09�
 | **Calendar (LMTA account)** | Microsoft login with the institutional account. Users subscribe to entries (☆) and get a personal feed URL (`/feed/u/<token>.ics`) for Outlook, Google or Apple Calendar, with reminders 7 days and 1 day before each deadline. |
 | **Map** | Leaflet map of entries by country, with urgent ones in red. Online and international entries are listed separately. |
 | **Bilingual** | LT/EN interface; the data already has both languages. |
-| **Interop** | `/api/calls?<filters>` (JSON) and `/api/export.json` (the curator's schema 1). `/screen` fills the existing MISC TV‑screen template live from the database. |
+| **Interop** | `/api/calls?<filters>` (JSON) and `/api/export.json` (the curator's schema 1). |
 
 ## Quick start (local)
 
@@ -233,6 +234,39 @@ One-time setup on the server (as the owner of the clone):
 Runner logs: `journalctl -u 'actions.runner.*' -f`. Redeploy without a commit: Actions → *Test and deploy* → *Run workflow*.
 If files were edited by hand on the server, the fast-forward stops the deploy instead of overwriting them.
 
+## The screen in the music centre
+
+The home page (`https://misc.lmta.lt/open-calls/`) *is* the screen. It fills any window, draws at the
+screen's own resolution, and every hour (after a full round) quietly reloads to pick up new calls; if
+the network is down it keeps showing what it has. Moving the mouse shows a small panel (search,
+fullscreen, pause) that hides again after 3 seconds, together with the cursor.
+Keys: → / space next · ← previous · P pause · F fullscreen · S search. `?tv=1` forces the screen
+on a phone (phones are otherwise sent to the search page).
+
+**Mini PC / Raspberry Pi (Raspberry Pi OS with desktop, or Ubuntu)** — starts full screen on boot, no clicks:
+
+1. Set the display to the TV's native resolution (Raspberry Pi: *Preferences → Screen Configuration*;
+   a Pi 4 or 5 drives 4K) and turn off screen blanking (`sudo raspi-config` → *Display Options* →
+   *Screen Blanking* → *No*). Enable automatic login to the desktop.
+2. Create `~/misc-screen.sh` and make it executable (`chmod +x ~/misc-screen.sh`):
+   ```bash
+   #!/bin/bash
+   URL="https://misc.lmta.lt/open-calls/?tv=1"
+   until curl -fsS -o /dev/null --max-time 5 "$URL"; do sleep 5; done   # wait for the network
+   BROWSER=$(command -v chromium || command -v chromium-browser || command -v google-chrome)
+   exec "$BROWSER" --kiosk --noerrdialogs --disable-infobars --no-first-run \
+     --disable-session-crashed-bubble --disable-features=Translate --password-store=basic \
+     --check-for-update-interval=31536000 "$URL"
+   ```
+3. Start it with the desktop:
+   * Raspberry Pi OS (labwc, the default since late 2024): add the line `~/misc-screen.sh &` to `~/.config/labwc/autostart`.
+   * Older Raspberry Pi OS (wayfire): in `~/.config/wayfire.ini` add `[autostart]` and `screen = ~/misc-screen.sh`.
+   * Ubuntu / other desktops: `~/.config/autostart/misc-screen.desktop` with
+     `[Desktop Entry]`, `Type=Application`, `Name=MISC screen`, `Exec=/home/<user>/misc-screen.sh`.
+4. Reboot. To leave kiosk mode: `Alt+F4` (or connect via SSH and `pkill chromium`).
+
+**Laptop:** open the home page and press **F** (or the *Fullscreen* button that appears when the mouse moves).
+
 ## Operations on the server
 
 Everything runs under systemd. There are no containers.
@@ -325,7 +359,7 @@ app/
   ics.py         iCalendar generation
   auth.py        Microsoft Entra ID login (MSAL)
   views.py, admin.py, cli.py, scheduler.py
-  screen_template.html   the MISC TV-screen template, filled by /screen
+  tv.py          data for the screen (home page); templates/tv.html, static/tv.js and tv.css draw it
 seed/            initial curated data
 deploy/          deploy.sh (run on the server), install.sh, systemd units/timers, nginx snippet
 migrations/      Alembic migrations

@@ -18,7 +18,8 @@ from .importer import apply_record
 from .messages import msg
 from .models import Call, CallChange, Series, SeriesFollow, Subscription, User, db, today
 from .search import Filters, group_by_series, run_search, sort_calls
-from .taxonomy import COUNTRIES, KINDS, TOPICS as SCREEN_TEMPLATE_TOPICS
+from .taxonomy import COUNTRIES
+from .tv import tv_data
 
 bp = Blueprint("main", __name__)
 
@@ -32,6 +33,21 @@ def _public_call(call_id):
 
 
 @bp.route("/")
+def tv():
+    """Home: the open calls as a full-screen slideshow (also shown on the centre's screen)."""
+    if set(request.args) - {"tv"}:          # old search links (/?field=…) → the search page
+        return redirect(url_for(".index", **request.args.to_dict(flat=False)))
+    static = Path(current_app.static_folder)
+    v = int(max((static / f).stat().st_mtime for f in ("tv.js", "tv.css")))
+    return render_template("tv.html", tv=tv_data(), v=v)
+
+
+@bp.route("/screen")
+def screen():
+    return redirect(url_for(".tv", tv=1))
+
+
+@bp.route("/search")
 def index():
     lang = get_lang()
     f = Filters(request.args, current_user)
@@ -289,36 +305,3 @@ def api_export():
             "rules": "status: open|watch|reject. Exported from the MISC open calls app.",
             "calls": [c.to_dict() for c in sort_calls(calls, "deadline")]}
     return Response(json.dumps(body, ensure_ascii=False, indent=1), mimetype="application/json")
-
-
-# ---------------------------------------------------------------- TV screen
-
-SCREEN_KIND = {"journal": "conference", "works": "competition", "grant": "mobility", "other": "competition"}
-# the TV template knows only its own fixed topic list (taxonomy.TOPICS)
-SCREEN_TOPICS = set(SCREEN_TEMPLATE_TOPICS) - {"musicology", "pedagogy", "theatre"}
-
-
-@bp.route("/screen")
-def screen():
-    """The MISC TV-screen template, filled live from the database (open entries, by deadline)."""
-    tpl = (Path(current_app.root_path) / "screen_template.html").read_text(encoding="utf-8")
-    calls = [c for c in Call.query.filter_by(status="open").all()
-             if c.phase() in ("due_today", "closing_soon", "open", "rolling")]
-    data = []
-    for c in sort_calls(calls, "deadline"):
-        topics = [t for t in c.topic_list if t in SCREEN_TOPICS][:4] or ["research", "workshop"]
-        data.append({"kind": SCREEN_KIND.get(c.kind, c.kind), "titleLt": c.title_lt or c.title_en,
-                     "titleEn": c.title_en or c.title_lt, "cityLt": c.city_lt, "cityEn": c.city_en,
-                     "countryLt": c.country_lt, "countryEn": c.country_en, "countryCode": c.country_code or "XX",
-                     "deadline": c.deadline.isoformat() if c.deadline else "",
-                     "deadlineWordLt": c.deadline_word_lt, "deadlineWordEn": c.deadline_word_en,
-                     "descLt": c.desc_lt, "descEn": c.desc_en, "topics": topics, "url": c.url})
-    js = json.dumps(data, ensure_ascii=False, indent=1).replace("</", "<\\/")
-    tpl = re.sub(r"var CALLS = \[.*?\n\];", lambda _: f"var CALLS = {js};", tpl, count=1, flags=re.S)
-    d = date.today()
-    months = ["sausio", "vasario", "kovo", "balandžio", "gegužės", "birželio", "liepos", "rugpjūčio",
-              "rugsėjo", "spalio", "lapkričio", "gruodžio"]
-    tpl = re.sub(r"updatedLt: '[^']*'", f"updatedLt: 'Atnaujinta {d.year} m. {months[d.month - 1]} {d.day} d.'", tpl, 1)
-    tpl = re.sub(r"updatedEn: '[^']*'", f"updatedEn: 'Updated {d.strftime('%d %B %Y')}'", tpl, 1)
-    tpl = re.sub(r"checkBadge: true", "checkBadge: false", tpl, 1)
-    return Response(tpl, mimetype="text/html")

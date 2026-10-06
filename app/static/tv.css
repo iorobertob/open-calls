@@ -1,0 +1,222 @@
+/* MISC open calls — TV page (home). Base: the MISC screen template; overrides at the end. */
+/* ============================================================
+   MISC — atviri kvietimai · ekranams (16:9, 4K)
+   Piešiama fiksuotame 3840×2160 lauke ir automatiškai
+   sumažinama iki bet kokio 16:9 ekrano. Visi dydžiai — tikri 4K pikseliai.
+   ============================================================ */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#000;overflow:hidden;
+  font-family:'Barlow','Helvetica Neue',Helvetica,Arial,'Noto Sans',sans-serif;
+  -webkit-font-smoothing:antialiased}
+#fit{position:fixed;inset:0;display:grid;place-items:center}
+#stage{width:3840px;height:2160px;position:relative;transform-origin:center center;
+  background:#12161e;color:#eef1f7;overflow:hidden}
+
+/* ---------- viršutinė juosta ---------- */
+#bar{height:250px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;
+  gap:56px;padding:0 72px;border-bottom:3px solid rgba(255,255,255,.10);
+  background:linear-gradient(180deg,#171d27,#12161e)}
+.logo{width:196px;height:196px;flex:none;display:block}
+#barmid{min-width:0}
+#sectionLt{font-size:72px;font-weight:700;letter-spacing:-.5px;line-height:1.02;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#sectionEn{font-size:40px;font-weight:400;color:#9aa6bd;margin-top:6px;letter-spacing:.4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#barright{text-align:right;white-space:nowrap}
+#brandLine{font-size:34px;letter-spacing:8px;color:#8f9bb3;text-transform:uppercase}
+#nextUp{font-size:34px;font-weight:600;margin-top:12px;color:#c3cddf}
+#nextUp span{color:#6f7a90;font-weight:400}
+#dateLine{font-size:26px;color:#7b8699;margin-top:8px;letter-spacing:2px}
+
+/* ---------- tinklelis ---------- */
+#grid{position:absolute;top:250px;left:0;right:0;bottom:90px;
+  display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:44px;padding:40px 72px;
+  animation:pageIn .55s ease-out}
+@keyframes pageIn{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){#grid{animation:none}}
+#grid.n1{grid-template-columns:1fr}
+#grid.n2{grid-auto-rows:1fr}
+#grid.n3 .card:nth-child(3){grid-column:1 / -1;max-width:1660px;justify-self:center;width:100%}
+
+/* ---------- kortelė ---------- */
+.card{background:#1b2230;border:2px solid rgba(255,255,255,.09);border-radius:34px;
+  overflow:hidden;display:grid;grid-template-columns:376px 1fr 362px;min-width:0;
+  box-shadow:0 18px 60px rgba(0,0,0,.45)}
+#grid.n2 .card{grid-template-columns:470px 1fr 410px}
+#grid.n1 .card{grid-template-columns:900px 1fr 600px}
+#grid.n1 h2{font-size:104px}
+#grid.n1 .titleEn{font-size:58px;margin-top:16px}
+#grid.n1 .place{font-size:52px;margin-top:36px}
+#grid.n1 .placeEn{font-size:40px}
+#grid.n1 .desc{font-size:48px;padding-top:44px;line-height:1.4}
+#grid.n1 .descEn{font-size:38px;margin-top:14px}
+#grid.n1 .kind{font-size:32px;padding:13px 26px;margin-bottom:34px}
+#grid.n1 .body{padding:64px 80px;justify-content:center}
+#grid.n1 .spacer{display:none}
+#grid.n1 .dlLabel{font-size:30px}
+#grid.n1 .dlLabelEn{font-size:25px}
+#grid.n1 .dlWord{font-size:34px}
+#grid.n1 .side{padding:56px 40px;justify-content:center}
+#grid.n1 .qrBox{margin:80px 0 0}
+#grid.n1 .scan{font-size:29px;margin-top:22px}
+#grid.n1 .visLabel{font-size:34px}
+
+.vis{position:relative;overflow:hidden;background:#0e131b}
+.vis svg{position:absolute;inset:-6%;width:112%;height:112%;
+  animation:drift 46s ease-in-out infinite alternate}
+.vis:nth-of-type(odd) svg{animation-duration:58s;animation-direction:alternate-reverse}
+@keyframes drift{
+  from{transform:scale(1) translate(0,0)}
+  to  {transform:scale(1.07) translate(-1.5%, 1.8%)}
+}
+@media (prefers-reduced-motion:reduce){.vis svg{animation:none}}
+.visLabel{position:absolute;left:26px;bottom:22px;right:26px;font-size:24px;letter-spacing:6px;
+  text-transform:uppercase;color:rgba(255,255,255,.62);z-index:2}
+
+.body{padding:36px 40px 30px;display:flex;flex-direction:column;min-width:0}
+.kind{display:inline-block;align-self:flex-start;font-size:23px;font-weight:700;letter-spacing:3px;
+  text-transform:uppercase;padding:9px 18px;border-radius:10px;margin-bottom:20px}
+h2{font-size:60px;font-weight:700;line-height:1.05;letter-spacing:-.6px;
+  overflow-wrap:anywhere;hyphens:auto}
+.titleEn{font-size:36px;font-weight:400;color:#9fabc2;line-height:1.16;margin-top:10px;
+  overflow-wrap:anywhere}
+.place{margin-top:20px;font-size:33px;color:#c7d0e0;font-weight:600;line-height:1.25}
+.placeEn{font-size:27px;color:#828fa6;font-weight:400;margin-top:3px}
+.desc{padding-top:22px;font-size:27px;line-height:1.36;color:#b6c0d3}
+.descEn{font-size:24px;line-height:1.34;color:#7d889e;margin-top:8px}
+.spacer{flex:1;min-height:0}
+
+/* ---------- temų burbuliukai ---------- */
+.topics{display:flex;flex-wrap:wrap;gap:11px;margin-top:22px}
+.topic{font-size:23px;font-weight:600;line-height:1.15;padding:9px 20px;border-radius:999px;
+  border:2px solid transparent;white-space:nowrap}
+.topic .en{font-weight:400;opacity:.72;margin-left:9px}
+/* konteksto / formato šeima — be spalvos, tik kontūras (skiriasi forma, ne tik atspalviu) */
+.topic.ctx{background:transparent;border-color:rgba(255,255,255,.28);color:#aab4c6}
+#grid.n1 .topics{gap:16px;margin-top:34px}
+#grid.n1 .topic{font-size:32px;padding:13px 28px}
+#grid.n2 .topic{font-size:25px}
+
+.side{border-left:2px solid rgba(255,255,255,.08);padding:32px 22px;
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+  background:rgba(255,255,255,.025)}
+.dlLabel{font-size:22px;letter-spacing:4px;text-transform:uppercase;color:#8b97ad}
+.dlLabelEn{font-size:19px;letter-spacing:3px;text-transform:uppercase;color:#66718a;margin-top:2px}
+.dlDay{font-size:106px;font-weight:700;line-height:.95;margin-top:12px;letter-spacing:-4px}
+.dlMon{font-size:29px;font-weight:600;line-height:1.2;margin-top:8px;color:#d3dbe9}
+.dlMonEn{font-size:24px;font-weight:400;line-height:1.2;color:#8b96a9;margin-top:2px}
+.dlWord{font-size:34px;font-weight:700;line-height:1.15;margin-top:14px}
+.soon{margin-top:16px;font-size:22px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;
+  padding:9px 18px;border-radius:9px;background:#4a1f1c;color:#ff9b91;line-height:1.25;
+  white-space:nowrap}
+.soon span{display:block;font-size:17px;font-weight:600;letter-spacing:1.5px;opacity:.78}
+.card.urgent{border-color:rgba(230,103,103,.45)}
+.card.urgent .dlDay{color:#ff9b91}
+#grid.n1 .dlDay{font-size:170px}
+#grid.n1 .dlMon{font-size:44px}
+#grid.n1 .dlMonEn{font-size:36px}
+#grid.n1 .soon{font-size:28px;padding:12px 24px}
+.qrBox{margin-top:auto;background:#fff;border-radius:18px;padding:10px;width:306px;height:306px}
+#grid.n2 .qrBox{width:350px;height:350px;padding:12px}
+#grid.n1 .qrBox{width:470px;height:470px;padding:16px;border-radius:26px}
+.qrBox svg{width:100%;height:100%;display:block}
+.scan{margin-top:14px;font-size:21px;letter-spacing:2px;color:#9aa6bd;line-height:1.3}
+.scan b{display:block;color:#cfd7e6;font-weight:600;letter-spacing:3px}
+.host{margin-top:8px;font-size:19px;color:#6f7a90;letter-spacing:.5px;
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#grid.n1 .host{font-size:28px;margin-top:12px}
+
+/* ---------- apatinė juosta ---------- */
+#foot{position:absolute;left:0;right:0;bottom:0;height:90px;display:flex;align-items:center;
+  justify-content:space-between;padding:0 72px;font-size:27px;color:#8b96a9;letter-spacing:2px;
+  border-top:2px solid rgba(255,255,255,.08);background:#0f141c}
+#foot b{color:#dbe2ef;font-weight:600}
+#foot .en{color:#6b7688}
+#prog{position:absolute;left:0;bottom:0;height:6px;background:#6b8cff;width:0;transition:width .25s linear}
+
+/* ---------- patikros skydelis (klavišas V) ---------- */
+#checkBadge{position:absolute;right:26px;bottom:104px;z-index:40;display:none;
+  background:#4a1f1c;color:#ffb3ab;border:2px solid #7a3a34;border-radius:12px;
+  padding:12px 20px;font-size:24px;font-weight:600;letter-spacing:.5px}
+#checkPanel{position:absolute;inset:60px;z-index:50;display:none;overflow:auto;
+  background:#0d1119f2;border:2px solid rgba(255,255,255,.16);border-radius:24px;padding:44px 52px}
+#checkPanel.on,#checkBadge.on{display:block}
+#checkPanel h3{font-size:44px;font-weight:700;margin-bottom:8px}
+#checkPanel .sub{font-size:26px;color:#8b96a9;margin-bottom:28px}
+#checkPanel ul{list-style:none}
+#checkPanel li{font-size:26px;line-height:1.45;padding:10px 0;
+  border-bottom:1px solid rgba(255,255,255,.07)}
+#checkPanel .who{color:#dbe2ef;font-weight:600}
+#checkPanel .err{color:#ff9b91}
+#checkPanel .warn{color:#e5bb5e}
+#checkPanel .ok{font-size:32px;color:#7fce9f;font-weight:600}
+
+/* ---------- titulinis / legendos lapas ---------- */
+#cover{position:absolute;inset:250px 0 90px;display:none;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;padding:60px 120px;
+  animation:pageIn .55s ease-out}
+#cover.on{display:flex}
+#cover .clogo{width:520px;height:520px;margin-bottom:26px}
+#cover h1{font-size:96px;font-weight:700;letter-spacing:-1.5px;line-height:1.06}
+#cover .h1en{font-size:52px;font-weight:400;color:#9aa6bd;margin-top:14px}
+#cover .legendTitle{margin-top:64px;font-size:26px;letter-spacing:6px;text-transform:uppercase;
+  color:#7b8699}
+#cover .legend{display:flex;flex-wrap:wrap;justify-content:center;gap:22px;margin-top:24px}
+#cover .lg{display:flex;align-items:center;gap:16px;padding:16px 30px;border-radius:999px;
+  background:rgba(255,255,255,.05);border:2px solid rgba(255,255,255,.09)}
+#cover .sw{width:36px;height:36px;border-radius:10px;flex:none}
+#cover .sw.out{background:transparent;border:3px solid rgba(255,255,255,.35)}
+#cover .lgt{font-size:30px;font-weight:600;line-height:1.2;text-align:left}
+#cover .lgt span{display:block;font-size:24px;font-weight:400;color:#8b96a9}
+
+/* užpildo kortelė, kai lape mažiau nei 4 kvietimai */
+.filler{display:flex;align-items:center;justify-content:center;gap:56px;
+  background:repeating-linear-gradient(135deg,#161c26 0 40px,#141a24 40px 80px)}
+.filler .logo{width:300px;height:300px}
+.filler .ftxt{font-size:40px;color:#8f9bb3;line-height:1.4;letter-spacing:2px}
+.filler .ftxt b{display:block;color:#dfe5f0;font-size:52px;font-weight:700;letter-spacing:0;margin-bottom:10px}
+/* ============================================================
+   App overrides
+   ============================================================ */
+/* fill any window: the stage is sized and zoomed by fit() in tv.js */
+html,body{background:#12161e}
+#stage{position:absolute;left:0;top:0;transform-origin:0 0}
+body.idle,body.idle *{cursor:none}
+
+/* field colour dot in the header */
+.hdot{display:inline-block;width:50px;height:50px;border-radius:50%;margin-right:30px;vertical-align:-2px}
+
+/* series line on a card */
+.serline{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:-4px 0 14px;font-size:28px;color:#c3cddf}
+.serline .sico{width:32px;height:32px;flex:none;color:#9aa6bd}
+.serline b{font-weight:700}
+.serline span{color:#8b97ad;font-weight:400}
+#grid.n1 .serline{font-size:40px}
+#grid.n1 .serline .sico{width:44px;height:44px}
+.card.series{box-shadow:0 18px 60px rgba(0,0,0,.45),14px 14px 0 -2px #161c27,14px 14px 0 0 rgba(255,255,255,.07)}
+
+/* long texts never push the card apart */
+h2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.titleEn{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.desc{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden}
+.body{overflow:hidden}
+
+/* cover: introduction + field legend on the left, QR code to the search page on the right */
+#cover.on{flex-direction:row;gap:180px}
+#cover .cmain{display:flex;flex-direction:column;align-items:center;max-width:2300px}
+#cover .clogo{width:440px;height:440px}
+#cover .cqr{display:flex;flex-direction:column;align-items:center;text-align:center}
+#cover .cqr .qrBox{width:560px;height:560px;padding:18px;border-radius:28px;margin:0}
+#cover .cqr .scan{font-size:34px;margin-top:26px}
+#cover .cqr .host{font-size:30px;margin-top:10px}
+
+/* the small panel: search, fullscreen, pause (real pixels, not scaled; hidden when idle) */
+#ctl{position:fixed;top:14px;right:14px;z-index:100;display:flex;gap:8px;opacity:0;pointer-events:none;
+  transition:opacity .3s;font:600 14px/1 system-ui,-apple-system,'Segoe UI',sans-serif}
+#ctl.on{opacity:1;pointer-events:auto}
+#ctl a,#ctl button{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;
+  border:1px solid rgba(255,255,255,.22);background:rgba(15,20,28,.88);color:#eef1f7;text-decoration:none;
+  cursor:pointer;font:inherit;backdrop-filter:blur(6px)}
+#ctl a{background:#6b8cff;border-color:#6b8cff;color:#0d1119}
+#ctl a:hover,#ctl button:hover{filter:brightness(1.15)}
+#ctl a:focus-visible,#ctl button:focus-visible{outline:3px solid #fff;outline-offset:2px}

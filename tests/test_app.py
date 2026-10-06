@@ -48,13 +48,13 @@ def test_phases(app):
 
 def test_list_hides_closed_and_filters(app):
     c = app.test_client()
-    body = c.get("/").get_data(as_text=True)
+    body = c.get("/search").get_data(as_text=True)
     assert "Soon conf" in body and "Watch me" in body and "Past" not in body
-    assert "Later residency" not in c.get("/?kind=conference").get_data(as_text=True)
-    assert "Soon conf" not in c.get("/?free=1").get_data(as_text=True)
-    assert "Later residency" in c.get("/?region=BALTIC").get_data(as_text=True)
-    assert "Soon conf" in c.get("/?topic=ai").get_data(as_text=True)
-    assert "Soon conf" in c.get("/?q=soon").get_data(as_text=True)
+    assert "Later residency" not in c.get("/search?kind=conference").get_data(as_text=True)
+    assert "Soon conf" not in c.get("/search?free=1").get_data(as_text=True)
+    assert "Later residency" in c.get("/search?region=BALTIC").get_data(as_text=True)
+    assert "Soon conf" in c.get("/search?topic=ai").get_data(as_text=True)
+    assert "Soon conf" in c.get("/search?q=soon").get_data(as_text=True)
 
 
 def test_ics(app):
@@ -94,7 +94,7 @@ def test_prefix_mount(app):
     """Behind nginx at /open-calls: links, redirects and login `next` keep the prefix."""
     c = app.test_client()
     h = {"X-Forwarded-Prefix": "/open-calls", "X-Forwarded-Proto": "https", "X-Forwarded-Host": "misc.lmta.lt"}
-    body = c.get("/", headers=h).get_data(as_text=True)
+    body = c.get("/search", headers=h).get_data(as_text=True)
     assert 'href="/open-calls/static/style.css"' in body and 'href="/open-calls/call/1"' in body
     r = c.get("/my", headers=h)
     assert r.headers["Location"].startswith("/open-calls/auth/login?next=")
@@ -124,9 +124,9 @@ def test_english_mode_has_no_lithuanian_ui(app):
     call.series_id = s.id
     db.session.add(Call(title_en="Other", url="https://a.example/2", status="open"))   # → a suggested series group
     db.session.commit()
-    for url in ["/", "/call/1", "/map", "/about", "/my", "/suggest", "/admin/", "/admin/call/1/edit", "/admin/users", "/nope",
+    for url in ["/search", "/call/1", "/map", "/about", "/my", "/suggest", "/admin/", "/admin/call/1/edit", "/admin/users", "/nope",
                 f"/series/{s.id}", "/admin/series", f"/admin/series/{s.id}", "/admin/series/suggestions", "/admin/series/new",
-                "/admin/emails", "/admin/emails/test", "/?field=music&cat=compute"]:
+                "/admin/emails", "/admin/emails/test", "/search?field=music&cat=compute"]:   # "/" (the screen) is LT + EN at once, by design
         html = c.get(url).get_data(as_text=True)
         html = re.sub(r"<(script|textarea|input|option)[^>]*>.*?</\1>|<input[^>]*>", "", html, flags=re.S)
         text = re.sub(r"<[^>]+>", " ", html)
@@ -418,16 +418,16 @@ def test_explorer_filters_and_counts(app):
     db.session.commit()
     c = app.test_client()
     c.get("/lang/en")
-    home = c.get("/").get_data(as_text=True)
+    home = c.get("/search").get_data(as_text=True)
     assert "Music and Sound" in home and "Theatre" in home and "Cinema" in home and "Dance and Performance" in home
-    theatre = c.get("/?field=theatre").get_data(as_text=True)
+    theatre = c.get("/search?field=theatre").get_data(as_text=True)
     assert "Opera lab" in theatre and "Soon conf" not in theatre
     assert "Music theatre &amp; opera" in theatre                # its categories appear
-    cat = c.get("/?field=music&cat=compute").get_data(as_text=True)
+    cat = c.get("/search?field=music&cat=compute").get_data(as_text=True)
     assert "Soon conf" in cat and "Later residency" not in cat and "generative AI" in cat   # sub-disciplines appear
-    both = c.get("/?cat=compute&topic=ai&topic=algorithmic").get_data(as_text=True)
+    both = c.get("/search?cat=compute&topic=ai&topic=algorithmic").get_data(as_text=True)
     assert "Soon conf" in both                                # several sub-disciplines = any of them
-    old = c.get("/?family=compute").get_data(as_text=True)     # old links still work
+    old = c.get("/search?family=compute").get_data(as_text=True)     # old links still work
     assert "Soon conf" in old and "Later residency" not in old
 
 
@@ -637,14 +637,40 @@ def test_home_series_view_and_all_view(app):
     db.session.commit()
     c = app.test_client()
     c.get("/lang/en")
-    html = c.get("/").get_data(as_text=True)              # default = Series view
+    html = c.get("/search").get_data(as_text=True)              # default = Series view
     assert html.index('class="searchrow"') < html.index('class="explore"')        # search box comes first
     assert 'class="on" aria-current="true">Series' in html
     assert html.count('<article class="scard"') == 1 and "Soundworks" in html
     assert '<details class="snest" >' in html or '<details class="snest">' in html  # collapsed
     assert "Calls not in a series" in html and "SMT events" not in html
-    allv = c.get("/?view=all").get_data(as_text=True)
+    allv = c.get("/search?view=all").get_data(as_text=True)
     assert '<details class="snest" open>' in allv                                   # series expanded
     assert "Calls not in a series" not in allv and "Later residency" in allv        # other calls as normal cards
     assert 'name="view" value="all"' in allv                                        # kept when searching
-    assert "view=all" in c.get("/?view=all&field=music").get_data(as_text=True)   # kept by the explorer links
+    assert "view=all" in c.get("/search?view=all&field=music").get_data(as_text=True)   # kept by the explorer links
+
+
+# ---------------------------------------------------------------- the screen (home page)
+
+def test_tv_home(app):
+    import json
+    import re
+    sw = _series(name_en="Soundworks", name_lt="Soundworks", url="https://sw.example")
+    db.session.get(Call, 1).series_id = sw.id
+    db.session.commit()
+    c = app.test_client()
+    h = {"X-Forwarded-Prefix": "/open-calls", "X-Forwarded-Proto": "https", "X-Forwarded-Host": "misc.lmta.lt"}
+    html = c.get("/", headers=h).get_data(as_text=True)
+    assert "/open-calls/static/tv.js" in html and "/open-calls/static/tv.css" in html
+    data = json.loads(re.search(r"window\.TV = (.*?);</script>", html, re.S).group(1))
+    items = {i["titleEn"]: i for i in data["items"]}
+    assert set(items) == {"Soon conf", "Later residency"}               # open only: no closed, no "opens soon"
+    assert items["Soon conf"]["series"] == {"lt": "Soundworks", "en": "Soundworks", "n": 1}
+    assert items["Soon conf"]["url"] == f"https://misc.lmta.lt/open-calls/series/{sw.id}"
+    assert items["Later residency"]["series"] is None
+    assert all(i["field"] in {f["key"] for f in data["fields"]} for i in data["items"])
+    assert data["config"]["searchUrl"] == "/open-calls/search"
+    # old links keep working
+    assert c.get("/?field=music&topic=ai").headers["Location"].endswith("/search?field=music&topic=ai")
+    assert c.get("/screen").headers["Location"].endswith("/?tv=1")
+    assert c.get("/?tv=1").status_code == 200

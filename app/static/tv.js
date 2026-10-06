@@ -616,20 +616,26 @@ function coverHtml(){
       '<div class="host">'+esc(CONFIG.siteLabel||'')+'</div></div>';
 }
 
-/* pages: grouped by field (in the admin's order), by deadline inside, CONFIG.perPage per page */
+/* pages: each page holds CONFIG.perPage calls of ONE field (the header names it), sorted by deadline;
+   which calls share a page and the order of the pages are random, and change every round.
+   n / N in the header is the page's place in the current round. */
+function shuffle(a){
+  for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)), t=a[i]; a[i]=a[j]; a[j]=t; }
+  return a;
+}
+function byDeadline(a,b){
+  return (a.deadline||'9999').localeCompare(b.deadline||'9999') || String(a.titleLt).localeCompare(String(b.titleLt));
+}
 function buildPages(){
   var pages=[], order=FIELDS.map(function(f){return f.key;});
   CALLS.forEach(function(c){ if(order.indexOf(c.field)<0) order.push(c.field); });
   order.forEach(function(fk){
-    var list=CALLS.filter(function(c){return c.field===fk;});
-    if(!list.length) return;
-    list.sort(function(a,b){
-      return (a.deadline||'9999').localeCompare(b.deadline||'9999') || String(a.titleLt).localeCompare(String(b.titleLt));
-    });
-    var parts=Math.ceil(list.length/CONFIG.perPage);
+    var list=shuffle(CALLS.filter(function(c){return c.field===fk;}));
     for(var i=0;i<list.length;i+=CONFIG.perPage)
-      pages.push({field:fk, items:list.slice(i,i+CONFIG.perPage), part:i/CONFIG.perPage+1, parts:parts});
+      pages.push({field:fk, items:list.slice(i,i+CONFIG.perPage).sort(byDeadline)});
   });
+  shuffle(pages);
+  pages.forEach(function(p,i){ p.n=i+1; p.N=pages.length; });
   if(CONFIG.showCover || !pages.length) pages.unshift({cover:true, items:[]});
   return pages;
 }
@@ -646,7 +652,7 @@ function render(){
     secEn.textContent='Music Innovation Studies Centre';
   }else{
     secLt.innerHTML='<i class="hdot" style="background:'+fieldColor(f)+'"></i>'+esc(f.lt);
-    secEn.textContent=f.en+(pg.parts>1 ? '   ·   '+pg.part+' / '+pg.parts : '');
+    secEn.textContent=f.en+(pg.N>1 ? '   ·   '+pg.n+' / '+pg.N : '');
   }
   /* "Next" names the NEXT field only — not the same one continuing over several pages */
   var nf=null;
@@ -688,7 +694,7 @@ function maybeReload(){
 
 function go(d){
   idx=(idx+d+PAGES.length)%PAGES.length;
-  if(idx===0 && d>0) maybeReload();
+  if(idx===0 && d>0 && !maybeReload()) PAGES=buildPages();     /* a new round: a new random order */
   render(); restart();
 }
 function restart(){

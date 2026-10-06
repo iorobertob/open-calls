@@ -1,0 +1,53 @@
+# Push to main → run the tests on GitHub → deploy on the server.
+# The server is behind the VPN, so GitHub cannot reach it; instead a self-hosted runner ON the server
+# keeps an outgoing connection to GitHub and picks up the deploy job (see "Automatic deployment" in README.md).
+name: Test and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:        # "Run workflow" button in the Actions tab: redeploy without a new commit
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false # never interrupt a deploy that has started; the next one waits
+
+jobs:
+  test:
+    runs-on: ubuntu-latest  # GitHub's machine, not the server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest -q tests
+
+  deploy:
+    needs: test             # a failing test stops the deploy
+    runs-on: [self-hosted, open-calls]
+    environment: production
+    env:
+      APP_DIR: /var/www/open-calls
+    steps:
+      - name: Update the clone
+        run: |
+          cd "$APP_DIR"
+          auth=$(printf 'x-access-token:%s' "${{ secrets.GITHUB_TOKEN }}" | base64 -w0)
+          git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $auth" \
+            fetch --prune origin main
+          # Fast-forward only: stops (instead of overwriting) if files were edited by hand on the server
+          git merge --ff-only origin/main
+          git log -1 --format='Deploying %h %s'
+      - name: Deploy
+        run: |
+          cd "$APP_DIR"
+          ./deploy/deploy.sh
+      - name: Smoke test
+        run: |
+          for i in 1 2 3 4 5; do
+            curl -fsS -o /dev/null --resolve misc.lmta.lt:443:127.0.0.1 https://misc.lmta.lt/open-calls/ && { echo "site is up"; exit 0; }
+            sleep 3
+          done
+          echo "site did not answer after the deploy" >&2; exit 1

@@ -213,6 +213,26 @@ cd /var/www/open-calls && ./deploy/deploy.sh
 # check the site, then: sudo rm -rf /var/www/open-calls.old
 ```
 
+### Automatic deployment (push to main)
+
+`.github/workflows/deploy.yml` runs the tests on GitHub, then deploys. The server is behind the VPN, so
+GitHub cannot connect to it: a **self-hosted GitHub Actions runner** on the server opens an *outgoing*
+connection to GitHub, picks up the deploy job and runs `git fetch` + `git merge --ff-only` + `./deploy/deploy.sh`
+in `/var/www/open-calls`, as the owner of the clone.
+
+One-time setup on the server (as the owner of the clone):
+
+1. A sudo rule so the deploy runs without a password — only this exact command:
+   `sudo visudo -f /etc/sudoers.d/opencalls-deploy` →
+   `<you> ALL=(root) NOPASSWD:SETENV: /usr/bin/bash /var/www/open-calls/deploy/install.sh`
+2. The runner: GitHub → repository → Settings → Actions → Runners → *New self-hosted runner* (Linux x64);
+   follow the download commands in `~/actions-runner`, then
+   `./config.sh --url https://github.com/iorobertob/open-calls --token <token> --name misc-server --labels open-calls --unattended`
+   and `sudo ./svc.sh install "$(whoami)" && sudo ./svc.sh start`.
+
+Runner logs: `journalctl -u 'actions.runner.*' -f`. Redeploy without a commit: Actions → *Test and deploy* → *Run workflow*.
+If files were edited by hand on the server, the fast-forward stops the deploy instead of overwriting them.
+
 ## Operations on the server
 
 Everything runs under systemd. There are no containers.

@@ -78,7 +78,7 @@ def tv_data():
     d = run.finished_at.date() if run else date.today()
     return {
         "config": {
-            "slideSeconds": 22, "perPage": 4, "urgentDays": 14, "today": "",
+            "slideSeconds": 10, "coverSeconds": 5, "perPage": 4, "urgentDays": 14, "today": "",
             "reloadMinutes": 60,
             "updatedLt": f"Atnaujinta {d.year} m. {MONTHS_LT[d.month - 1]} {d.day} d.",
             "updatedEn": f"Updated {d.day} {d.strftime('%B %Y')}",

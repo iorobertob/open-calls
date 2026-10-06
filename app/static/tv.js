@@ -6,7 +6,7 @@
    Keys: → / space next · ← previous · P pause · F fullscreen · S search
    ================================================================ */
 var TV = window.TV || {config: {}, fields: [], items: []};
-var CONFIG = {slideSeconds: 22, perPage: 4, autoplay: true, showCover: true, markUrgent: true,
+var CONFIG = {slideSeconds: 10, coverSeconds: 5, perPage: 4, autoplay: true, showCover: true, markUrgent: true,
               urgentDays: 14, today: '', reloadMinutes: 60};
 Object.keys(TV.config || {}).forEach(function (k) { CONFIG[k] = TV.config[k]; });
 var CALLS = TV.items || [];
@@ -695,7 +695,7 @@ function restart(){
   clearInterval(timer); clearInterval(tick);
   var bar=document.getElementById('prog'); bar.style.width='0%';
   if(!CONFIG.autoplay || PAGES.length<2) return;
-  var t0=Date.now(), ms=CONFIG.slideSeconds*1000;
+  var t0=Date.now(), ms=(PAGES[idx].cover ? CONFIG.coverSeconds : CONFIG.slideSeconds)*1000;
   tick=setInterval(function(){bar.style.width=Math.min(100,(Date.now()-t0)/ms*100)+'%';},240);
   timer=setInterval(function(){go(1);},ms);
 }
@@ -740,6 +740,8 @@ function wake(){
   clearTimeout(idleT);
   idleT=setTimeout(function(){ ctl.classList.remove('on'); document.body.classList.add('idle'); }, 3000);
 }
+document.getElementById('navPrev').addEventListener('click', function(){ go(-1); });
+document.getElementById('navNext').addEventListener('click', function(){ go(1); });
 document.getElementById('ctlFs').addEventListener('click', function(){ toggleFull(); });
 document.getElementById('ctlPlay').addEventListener('click', function(){
   CONFIG.autoplay=!CONFIG.autoplay; restart(); updateCtl();
@@ -759,7 +761,7 @@ document.addEventListener('keydown', function(e){
   else if(k==='s') location.href=CONFIG.searchUrl;
 });
 document.addEventListener('click', function(e){
-  if(e.target.closest && e.target.closest('#ctl')) return;
+  if(e.target.closest && e.target.closest('#ctl, .navarrow')) return;
   go(1);
 });
 fit(); render(); restart(); updateCtl();

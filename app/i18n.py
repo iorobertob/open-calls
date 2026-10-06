@@ -373,6 +373,8 @@ LT = {
     'until': 'iki',
     'Clear all': 'Išvalyti viską',
     'Screen': 'Ekranas',
+    'Menu': 'Meniu',
+    'Close': 'Uždaryti',
     'All': 'Visi',
     'Topics': 'Temos',
     'Calendar': 'Kalendorius',

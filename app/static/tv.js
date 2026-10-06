@@ -711,6 +711,7 @@ function fit(){
   var W=window.innerWidth, H=window.innerHeight, s=Math.min(W/3840, H/2160);
   var st=document.getElementById('stage');
   st.style.width=(W/s)+'px'; st.style.height=(H/s)+'px';
+  st.style.setProperty('--s', s);
   if(USE_ZOOM) st.style.zoom=s; else st.style.transform='scale('+s+')';
 }
 
@@ -732,6 +733,7 @@ var ctl=document.getElementById('ctl'), idleT=null;
 function updateCtl(){
   document.getElementById('ctlFs').querySelector('span').textContent =
     (document.fullscreenElement||document.webkitFullscreenElement) ? 'Išeiti · Exit' : 'Visas ekranas · Fullscreen';
+  document.getElementById('ctlPlay').setAttribute('aria-label', CONFIG.autoplay ? 'Pause' : 'Play');
   document.getElementById('ctlPlay').textContent = CONFIG.autoplay ? '❚❚' : '▶';
   document.getElementById('ctlPlay').title = CONFIG.autoplay ? 'Pauzė · Pause (P)' : 'Groti · Play (P)';
 }

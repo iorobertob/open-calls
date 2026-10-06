@@ -10,30 +10,34 @@
 {% block head %}{% endblock %}
 </head>
 <body>
-<header class="top">
+<header class="top" id="top">
   <div class="in">
     <a class="brand" href="{{ url_for('main.tv') }}">
       <img src="{{ url_for('static', filename='misc-logo.png') }}" alt="MISC" width="40" height="40">
       <span><b>{{ _("Open calls") }}</b><small>MISC · {{ _("Lithuanian Academy of Music and Theatre") }}</small></span>
     </a>
-    <nav class="menu">
-      <a href="{{ url_for('main.index') }}">{{ _("Open calls") }}</a>
-      <a href="{{ url_for('main.map_view') }}">{{ _("Map") }}</a>
-      <a href="{{ url_for('main.about') }}">{{ _("About") }}</a>
-      {% if user.is_authenticated %}
-        <a href="{{ url_for('main.my') }}">{{ _("My subscriptions") }}</a>
-        <a href="{{ url_for('main.suggest') }}">{{ _("Suggest a call") }}</a>
-        {% if user.is_admin %}<a href="{{ url_for('admin.dashboard') }}" class="adm">{{ _("Admin") }}</a>{% endif %}
-      {% endif %}
-    </nav>
-    <div class="tools">
-      <a class="pill" href="{{ url_for('main.set_lang', code='en' if lang == 'lt' else 'lt') }}">{{ 'EN' if lang == 'lt' else 'LT' }}</a>
-      <button class="pill" id="theme" type="button" aria-label="{{ _('Theme') }}">◐</button>
-      {% if user.is_authenticated %}
-        <a class="pill" href="{{ url_for('auth.logout') }}" title="{{ _('Logged in as') }} {{ user.email }}">{{ _("Log out") }}</a>
-      {% else %}
-        <a class="pill primary" href="{{ url_for('auth.login', next=request.full_path) }}">{{ _("Log in") }}</a>
-      {% endif %}
+    <button class="menubtn" id="menubtn" type="button" aria-expanded="false" aria-controls="sitemenu" aria-label="{{ _('Menu') }}">
+      <svg class="ico open" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      <svg class="ico close" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <div class="sitemenu" id="sitemenu">
+      {% set ep = request.endpoint or '' %}
+      <nav class="menu" aria-label="{{ _('Menu') }}">
+        {% for endpoint, label, show in [('main.index', 'Open calls', True), ('main.map_view', 'Map', True), ('main.about', 'About', True),
+                                         ('main.my', 'My subscriptions', user.is_authenticated), ('main.suggest', 'Suggest a call', user.is_authenticated)] if show %}
+          <a href="{{ url_for(endpoint) }}" {% if ep == endpoint %}aria-current="page"{% endif %}>{{ _(label) }}</a>
+        {% endfor %}
+        {% if user.is_authenticated and user.is_admin %}<a href="{{ url_for('admin.dashboard') }}" class="adm" {% if ep.startswith('admin.') %}aria-current="page"{% endif %}>{{ _("Admin") }}</a>{% endif %}
+      </nav>
+      <div class="tools">
+        <a class="pill" href="{{ url_for('main.set_lang', code='en' if lang == 'lt' else 'lt') }}" lang="{{ 'en' if lang == 'lt' else 'lt' }}">{{ 'EN' if lang == 'lt' else 'LT' }}<span class="lbl">{{ 'English' if lang == 'lt' else 'Lietuvių' }}</span></a>
+        <button class="pill" id="theme" type="button" aria-label="{{ _('Theme') }}">◐<span class="lbl">{{ _("Theme") }}</span></button>
+        {% if user.is_authenticated %}
+          <a class="pill" href="{{ url_for('auth.logout') }}" title="{{ _('Logged in as') }} {{ user.email }}">{{ _("Log out") }}<span class="lbl who">{{ user.email }}</span></a>
+        {% else %}
+          <a class="pill primary" href="{{ url_for('auth.login', next=request.full_path) }}">{{ _("Log in") }}</a>
+        {% endif %}
+      </div>
     </div>
   </div>
 </header>
@@ -100,6 +104,13 @@
 document.getElementById('theme').onclick=function(){var r=document.documentElement,
  cur=r.dataset.theme||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'),
  nx=cur==='dark'?'light':'dark';r.dataset.theme=nx;try{localStorage.setItem('theme',nx)}catch(e){}};
+// phone menu: open / close, close on Esc, outside tap or link
+(function(){ var top = document.getElementById('top'), b = document.getElementById('menubtn');
+  function set(on){ top.classList.toggle('open', on); b.setAttribute('aria-expanded', on ? 'true' : 'false'); }
+  b.onclick = function(){ set(!top.classList.contains('open')); };
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') set(false); });
+  document.addEventListener('click', function(e){ if (!top.contains(e.target)) set(false); });
+})();
 document.querySelectorAll('[data-copy]').forEach(function(b){b.onclick=function(){
  var el=document.getElementById(b.dataset.copy);el.select();try{navigator.clipboard.writeText(el.value)}catch(e){document.execCommand('copy')}
  b.textContent='✓';}});

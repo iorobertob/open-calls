@@ -210,23 +210,31 @@ h2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow
 #cover .cqr .scan{font-size:34px;margin-top:26px}
 #cover .cqr .host{font-size:30px;margin-top:10px}
 
-/* the small panel: search, fullscreen, pause (real pixels, not scaled; hidden when idle) */
-#ctl{position:fixed;top:14px;right:14px;z-index:100;display:flex;gap:8px;opacity:0;pointer-events:none;
-  transition:opacity .3s;font:600 14px/1 system-ui,-apple-system,'Segoe UI',sans-serif}
+/* Controls live INSIDE the layout, so they never cover content:
+   search / fullscreen / pause in the header bar, previous / next in the side margins.
+   --s is the canvas zoom (set by fit()); calc(Npx / var(--s)) = N real screen pixels at any size.
+   They show only while the mouse moves — never on the kiosk screen. */
+#stage{--s:1;--gut:max(72px, calc(46px / var(--s)))}
+#bar{grid-template-columns:auto 1fr auto auto}
+#grid{padding-left:var(--gut);padding-right:var(--gut)}
+#ctl{display:flex;gap:.6em;align-items:center;font:600 calc(14px / var(--s))/1 system-ui,-apple-system,'Segoe UI',sans-serif;
+  opacity:0;pointer-events:none;transition:opacity .3s}
 #ctl.on{opacity:1;pointer-events:auto}
-#ctl a,#ctl button{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:999px;
-  border:1px solid rgba(255,255,255,.22);background:rgba(15,20,28,.88);color:#eef1f7;text-decoration:none;
-  cursor:pointer;font:inherit;backdrop-filter:blur(6px)}
+#ctl a,#ctl button{display:inline-flex;align-items:center;gap:.55em;height:2.6em;padding:0 1.05em;border-radius:999px;
+  border:.08em solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#dfe5f0;text-decoration:none;
+  cursor:pointer;font:inherit;white-space:nowrap}
 #ctl a{background:#6b8cff;border-color:#6b8cff;color:#0d1119}
+#ctl #ctlPlay{width:2.6em;padding:0;justify-content:center}
+#ctl svg{width:1.25em;height:1.25em;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 #ctl a:hover,#ctl button:hover{filter:brightness(1.15)}
-#ctl a:focus-visible,#ctl button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+#ctl a:focus-visible,#ctl button:focus-visible{outline:.15em solid #fff;outline-offset:.15em}
 
-/* previous / next: faint arrows at the edges, only while the mouse is used (never on the kiosk screen) */
-.navarrow{position:fixed;top:50%;z-index:90;transform:translateY(-50%);width:44px;height:96px;padding:0;
-  display:grid;place-items:center;border:0;border-radius:12px;background:transparent;color:rgba(255,255,255,.28);
-  cursor:pointer;transition:opacity .3s,color .2s,background .2s}
-.navarrow.prev{left:6px}
-.navarrow.next{right:6px}
-.navarrow svg{width:30px;height:30px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.navarrow:hover,.navarrow:focus-visible{color:rgba(255,255,255,.85);background:rgba(15,20,28,.55);outline:none}
+.navarrow{position:absolute;top:250px;bottom:90px;width:var(--gut);z-index:5;padding:0;border:0;
+  display:grid;place-items:center;background:transparent;color:rgba(255,255,255,.3);cursor:pointer;
+  transition:opacity .3s,color .2s,background .2s}
+.navarrow.prev{left:0}
+.navarrow.next{right:0}
+.navarrow svg{width:calc(26px / var(--s));height:calc(26px / var(--s));fill:none;stroke:currentColor;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+.navarrow:hover,.navarrow:focus-visible{color:rgba(255,255,255,.9);background:rgba(255,255,255,.04);outline:none}
 body.idle .navarrow{opacity:0;pointer-events:none}

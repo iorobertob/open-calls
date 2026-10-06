@@ -20,8 +20,10 @@
     <label class="searchbox">{{ m.icon('search') }}
       <input type="search" name="q" value="{{ f.q }}" placeholder="{{ _('Search calls, organisers, places') }}" aria-label="{{ _('Search') }}"></label>
     <details class="fdrop" {{ 'open' if request.args.get('panel') }}>
-      <summary class="btn">{{ m.icon('sliders') }} {{ _("Filters") }}{% if n_active %} · {{ n_active }}{% endif %}</summary>
+      <summary class="btn" aria-label="{{ _('Filters') }}{% if n_active %} ({{ n_active }}){% endif %}">{{ m.icon('sliders') }}<span class="flabel">{{ _("Filters") }}</span>{% if n_active %}<span class="fcount">{{ n_active }}</span>{% endif %}</summary>
       <div class="fpanel" role="group" aria-label="{{ _('Filters') }}">
+        <div class="fpanel-head"><b>{{ _("Filters") }}</b>
+          <button type="button" class="iconbtn" data-fclose aria-label="{{ _('Close') }}">{{ m.icon('x') }}</button></div>
         <fieldset><legend>{{ _("Status") }}</legend>
           {% for k, label in STATUS %}<label class="opt"><input type="radio" name="show" value="{{ k }}" {{ 'checked' if f.show == k }}> {{ _(label) }}</label>{% endfor %}
         </fieldset>
@@ -98,10 +100,12 @@
         {% endfor %}
       </select></label>
     {% if csel %}
+    <div class="tchips" role="group" aria-label="{{ _('Topics') }}">
       <span class="tlabel">{{ _("Topics") }}</span>
       {% for d in TAX.disciplines_in(f.cat) if counts.topic[d.key] or d.key in f.topics %}
         <a class="tchip {{ 'on' if d.key in f.topics }}" href="{{ qs_toggle('topic', d.key) }}" aria-pressed="{{ 'true' if d.key in f.topics else 'false' }}">{{ d.name(lang) }}</a>
       {% endfor %}
+    </div>
     {% endif %}
     {% if f.cat or f.topics %}<a class="clearlink" href="{{ qs(drop=['cat', 'topic', 'family']) }}">{{ _("Clear") }}</a>{% endif %}
   </div>
@@ -153,9 +157,18 @@ document.getElementById('filters').addEventListener('submit', function(){
   this.querySelectorAll('input, select').forEach(function(el){ if (!el.value) el.disabled = true; });
   var st = this.querySelector('input[name=show]:checked'); if (st && st.value === 'active') st.disabled = true;
 });
-// close the filters panel when clicking outside it or pressing Esc
-(function(){ var d = document.querySelector('.fdrop'); if (!d) return;
-  document.addEventListener('click', function(e){ if (d.open && !d.contains(e.target)) d.open = false; });
-  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') d.open = false; }); })();
+// filters panel (a full-screen sheet on phones) and calendar pop-up: close on outside tap, ✕ or Esc;
+// while the sheet is open the page behind it does not scroll
+(function(){
+  var pops = document.querySelectorAll('.fdrop, .subfeed');
+  document.addEventListener('click', function(e){
+    pops.forEach(function(d){
+      if (d.open && (!d.contains(e.target) || e.target === d || e.target.closest('[data-fclose]'))) d.open = false;
+    });
+  });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') pops.forEach(function(d){ d.open = false; }); });
+  var f = document.querySelector('.fdrop');
+  if (f) f.addEventListener('toggle', function(){ document.documentElement.classList.toggle('sheet-open', f.open); });
+})();
 </script>
 {% endblock %}

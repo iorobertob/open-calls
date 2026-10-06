@@ -161,7 +161,8 @@ def group_by_series(calls, view="series"):
     """Turn the sorted list of calls into home-page items, keeping the sort order:
     - a series card where its first matching call would be (listing pages don't count as series);
     - view "series": calls without a series go into one last group ("other");
-    - view "all": calls without a series stay as normal cards in their place.
+    - view "all": calls without a series stay as normal cards in their place;
+    - no series among the results at all: plain cards in either view.
     Returns (items, n_series) where items are SeriesGroup, ("call", call) or ("other", [calls])."""
     items, groups, loose = [], {}, []
     for c in calls:
@@ -176,6 +177,8 @@ def group_by_series(calls, view="series"):
             items.append(("call", c))
         else:
             loose.append(c)
-    if loose:
+    if loose and not groups:      # no series among the results: just the calls, nothing to fold away
+        items = [("call", c) for c in loose]
+    elif loose:
         items.append(("other", loose))
     return items, len(groups)

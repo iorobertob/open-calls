@@ -24,6 +24,11 @@
       <div id="sectionLt"></div>
       <div id="sectionEn"></div>
     </div>
+    <nav id="ctl" aria-label="Screen controls">
+      <a href="{{ tv.config.searchUrl }}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>Paieška · Search</a>
+      <button id="ctlFs" type="button" title="F"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>Visas ekranas · Fullscreen</span></button>
+      <button id="ctlPlay" type="button" aria-label="Pause">❚❚</button>
+    </nav>
     <div id="barright">
       <div id="brandLine">Atviri kvietimai · Open calls</div>
       <div id="nextUp"></div>
@@ -31,21 +36,15 @@
     </div>
   </div>
   <div id="grid"></div>
+  <button class="navarrow prev" id="navPrev" type="button" aria-label="Ankstesnis · Previous (←)">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4l-8 8 8 8"/></svg></button>
+  <button class="navarrow next" id="navNext" type="button" aria-label="Kitas · Next (→)">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4l8 8-8 8"/></svg></button>
   <div id="cover"></div>
   <div id="foot"><span id="footLeft"></span><span id="footRight"></span></div>
   <div id="prog"></div>
 </div></div>
 
-<button class="navarrow prev" id="navPrev" type="button" aria-label="Ankstesnis · Previous (←)">
-  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4l-8 8 8 8"/></svg></button>
-<button class="navarrow next" id="navNext" type="button" aria-label="Kitas · Next (→)">
-  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4l8 8-8 8"/></svg></button>
-
-<nav id="ctl" aria-label="Screen controls">
-  <a href="{{ tv.config.searchUrl }}">⌕ Paieška · Search</a>
-  <button id="ctlFs" type="button" title="F">⛶ <span>Visas ekranas · Fullscreen</span></button>
-  <button id="ctlPlay" type="button">❚❚</button>
-</nav>
 
 <script>window.TV = {{ tv|tojson }};</script>
 <script src="{{ url_for('static', filename='tv.js', v=v) }}"></script>

@@ -129,6 +129,7 @@ def test_english_mode_has_no_lithuanian_ui(app):
                 "/admin/emails", "/admin/emails/test", "/search?field=music&cat=compute"]:   # "/" (the screen) is LT + EN at once, by design
         html = c.get(url).get_data(as_text=True)
         html = re.sub(r"<(script|textarea|input|option)[^>]*>.*?</\1>|<input[^>]*>", "", html, flags=re.S)
+        html = re.sub(r'<(a|span)\b[^>]*\blang="lt"[^>]*>.*?</\1>', "", html, flags=re.S)   # "Lietuvių" language switch
         text = re.sub(r"<[^>]+>", " ", html)
         found = [w for w in text.split() if lt_chars.search(w)]
         # the only Lithuanian allowed is untranslated *content*, which is tagged LT
